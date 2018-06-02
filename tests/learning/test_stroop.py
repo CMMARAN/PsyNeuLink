@@ -14,7 +14,7 @@ class TestStroop:
 
     def test_stroop_model(self):
         process_prefs = {
-            REPORT_OUTPUT_PREF: True,
+            REPORT_OUTPUT_PREF: False,
             VERBOSE_PREF: False
         }
 
@@ -201,15 +201,15 @@ class TestStroop:
         )
 
         def show_target():
-            print('\nColor Naming\n\tInput: {}\n\tTarget: {}'.format(colors.input_states.values_as_lists, s.targets))
-            print('Wording Reading:\n\tInput: {}\n\tTarget: {}\n'.format(words.input_states.values_as_lists, s.targets))
-            print('Response: \n', response.output_values[0])
+            print('\nColor Naming\n\tInput: {}\n\tTarget: {}'.format([np.ndarray.tolist(item.parameters.value.get(s)) for item in colors.input_states], s.targets))
+            print('Wording Reading:\n\tInput: {}\n\tTarget: {}\n'.format([np.ndarray.tolist(item.parameters.value.get(s)) for item in words.input_states], s.targets))
+            print('Response: \n', response.output_state.parameters.value.get(s))
             print('Hidden-Output:')
-            print(HO_Weights.mod_matrix)
+            print(HO_Weights.get_mod_matrix(s))
             print('Color-Hidden:')
-            print(CH_Weights.mod_matrix)
+            print(CH_Weights.get_mod_matrix(s))
             print('Word-Hidden:')
-            print(WH_Weights.mod_matrix)
+            print(WH_Weights.get_mod_matrix(s))
 
         stim_list_dict = {
             colors: [[1, 1]],
@@ -240,24 +240,24 @@ class TestStroop:
         from pprint import pprint
         pprint(CH_Weights.__dict__)
         print(CH_Weights._parameter_states["matrix"].value)
-        print(CH_Weights.mod_matrix)
+        print(CH_Weights.get_mod_matrix(s))
         expected_output = [
-            (colors.output_states[0].value, np.array([1., 1.])),
-            (words.output_states[0].value, np.array([-2., -2.])),
-            (hidden.output_states[0].value, np.array([0.13227553, 0.01990677])),
-            (response.output_states[0].value, np.array([0.51044657, 0.5483048])),
-            (objective_response.output_states[0].value, np.array([0.48955343, 0.4516952])),
-            (objective_response.output_states[MSE].value, np.array(0.22184555903789838)),
-            (objective_hidden.output_states[0].value, np.array([0., 0.])),
-            (CH_Weights.mod_matrix, np.array([
+            (colors.output_states[0].parameters.value.get(s), np.array([1., 1.])),
+            (words.output_states[0].parameters.value.get(s), np.array([-2., -2.])),
+            (hidden.output_states[0].parameters.value.get(s), np.array([0.13227553, 0.01990677])),
+            (response.output_states[0].parameters.value.get(s), np.array([0.51044657, 0.5483048])),
+            (objective_response.output_states[0].parameters.value.get(s), np.array([0.48955343, 0.4516952])),
+            (objective_response.output_states[MSE].parameters.value.get(s), np.array(0.22184555903789838)),
+            (objective_hidden.output_states[0].parameters.value.get(s), np.array([0., 0.])),
+            (CH_Weights.get_mod_matrix(s), np.array([
                 [ 0.02512045, 1.02167245],
                 [ 2.02512045, 3.02167245],
-                ])),
-            (WH_Weights.mod_matrix, np.array([
+            ])),
+            (WH_Weights.get_mod_matrix(s), np.array([
                 [-0.05024091, 0.9566551 ],
                 [ 1.94975909, 2.9566551 ],
             ])),
-            (HO_Weights.mod_matrix, np.array([
+            (HO_Weights.get_mod_matrix(s), np.array([
                 [ 0.03080958, 1.02830959],
                 [ 2.00464242, 3.00426575],
             ])),
