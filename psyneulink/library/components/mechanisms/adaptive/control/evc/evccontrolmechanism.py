@@ -374,6 +374,7 @@ Class Reference
 
 """
 
+import itertools
 import numpy as np
 import typecheck as tc
 
@@ -1242,3 +1243,12 @@ class EVCControlMechanism(ControlMechanism):
             self._combine_outcome_and_cost_function = udf
         else:
             self._combine_outcome_and_cost_function = value
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            [self.value_function],
+            [self.cost_function],
+            [self.combine_outcome_and_cost_function],
+        ))

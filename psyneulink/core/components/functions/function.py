@@ -201,6 +201,7 @@ Class Reference
 
 import ctypes
 import functools
+import itertools
 import numbers
 import numpy as np
 import typecheck as tc
@@ -6255,6 +6256,13 @@ class Integrator(IntegratorFunction):  # ---------------------------------------
     def function(self, *args, **kwargs):
         raise FunctionError("Integrator is not meant to be called explicitly")
 
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            [self.noise] if isinstance(self.noise, DistributionFunction) else []
+        ))
+
 
 class SimpleIntegrator(Integrator):  # --------------------------------------------------------------------------------
     """
@@ -11387,6 +11395,14 @@ COMMENT
         # MODIFIED 11/12/15 END
 
         return self.convert_output_type(result)
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            [self._metric_fct] if self._metric_fct is not None else [],
+            [self.transfer_fct] if self.transfer_fct is not None else [],
+        ))
 
 
 class Distance(ObjectiveFunction):

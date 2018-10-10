@@ -47,6 +47,7 @@ Class Reference
 """
 
 import collections
+import itertools
 import logging
 import numpy as np
 import typecheck as tc
@@ -3528,15 +3529,26 @@ class Composition(Composition_Base, metaclass=ComponentsMeta):
                                        .format(stimulus, node.name, input_must_match))
         return adjusted_stimuli
 
+    # copied from Component, because Compositions are not Components but we want same behavior
     def _initialize_from_context(self, execution_context, base_execution_context=None, override=True):
-        for c_node in self.c_nodes:
-            c_node._initialize_from_context(execution_context, base_execution_context, override)
+        for param in self.stateful_parameters:
+            param._initialize_from_context(execution_context, base_execution_context, override)
 
-        for proj in self.projections:
-            proj._initialize_from_context(execution_context, base_execution_context, override)
+        for comp in self._dependent_components:
+            comp._initialize_from_context(execution_context, base_execution_context, override)
 
-        self.input_CIM._initialize_from_context(execution_context, base_execution_context, override)
-        self.output_CIM._initialize_from_context(execution_context, base_execution_context, override)
+    def _assign_context_values(self, execution_id, base_execution_id=None, **kwargs):
+        context_param = self.parameters.context.get()
+        if context_param is None:
+            self.parameters.context._initialize_from_context(execution_id, base_execution_id)
+            context_param = self.parameters.context.get()
+            context_param.execution_id = execution_id
+
+        for context_item, value in kwargs.items():
+            setattr(context_param, context_item, value)
+
+        for comp in self._dependent_components:
+            comp._assign_context_values(execution_id, base_execution_id, **kwargs)
 
     @property
     def input_states(self):
@@ -3612,3 +3624,14 @@ class Composition(Composition_Base, metaclass=ComponentsMeta):
     @property
     def stateful_parameters(self):
         return [param for param in self.parameters if param.stateful]
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            self.c_nodes,
+            self.projections,
+            [self.input_CIM, self.output_CIM],
+            self.input_CIM.efferents,
+            self.output_CIM.afferents,
+        ))

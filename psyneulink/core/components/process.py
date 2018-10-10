@@ -2131,15 +2131,6 @@ class Process(Process_Base):
         for mech, value in self.initial_values.items():
             mech.initialize(value, execution_context)
 
-    def _initialize_from_context(self, execution_context, base_execution_context=None, override=True):
-        for mech in self._mechs:
-            mech._initialize_from_context(execution_context, base_execution_context, override)
-
-        for proj in self.projections:
-            proj._initialize_from_context(execution_context, base_execution_context, override)
-
-        super()._initialize_from_context(execution_context, base_execution_context, override)
-
     def execute(
         self,
         input=None,
@@ -2619,6 +2610,14 @@ class Process(Process_Base):
     def numPhases(self):
         return self._phaseSpecMax + 1
 
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            self._mechs,
+            self.projections,
+        ))
+
 
 class ProcessInputState(OutputState):
     """Represents inputs and targets specified in a call to the Process' `execute <Process.execute>` and `run
@@ -2689,6 +2688,12 @@ class ProcessInputState(OutputState):
     def value(self, assignment):
         self._value = assignment
         self.owner._update_input()
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            self.efferents,
+        ))
 
 ProcessTuple = namedtuple('ProcessTuple', 'process, input')
 

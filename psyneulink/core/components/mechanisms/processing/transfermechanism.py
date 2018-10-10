@@ -316,6 +316,7 @@ Class Reference
 
 """
 import inspect
+import itertools
 import numbers
 
 from collections import Iterable
@@ -1430,3 +1431,10 @@ class TransferMechanism(ProcessingMechanism_Base):
         # Otherwise just return True
         else:
             return None
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            [self.integrator_function] if self.integrator_function is not None else [],
+        ))

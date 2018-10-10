@@ -2793,10 +2793,8 @@ class Component(object, metaclass=ComponentsMeta):
             self.paramInstanceDefaults = self.paramClassDefaults.copy()
 
     def _initialize_from_context(self, execution_context, base_execution_context=None, override=True):
-        try:
-            self.function_object._initialize_from_context(execution_context, base_execution_context, override)
-        except AttributeError:
-            pass
+        for comp in self._dependent_components:
+            comp._initialize_from_context(execution_context, base_execution_context, override)
 
         for param in [p for p in self.stateful_parameters if p.setter is None]:
             param._initialize_from_context(execution_context, base_execution_context, override)
@@ -2818,6 +2816,9 @@ class Component(object, metaclass=ComponentsMeta):
 
         for context_item, value in kwargs.items():
             setattr(context_param, context_item, value)
+
+        for comp in self._dependent_components:
+            comp._assign_context_values(execution_id, base_execution_id, **kwargs)
 
     # ------------------------------------------------------------------------------------------------------------------
     # Parsing methods
@@ -3781,7 +3782,6 @@ class Component(object, metaclass=ComponentsMeta):
             if self.owner is not None:
                 self.owner.has_initializers = True
 
-
     @property
     def _default_variable_flexibility(self):
         try:
@@ -3891,8 +3891,16 @@ class Component(object, metaclass=ComponentsMeta):
             self._is_pnl_inherent = False
             return self._is_pnl_inherent
 
+    @property
+    def _dependent_components(self):
+        """
+            Returns a set of Components that will be executed if this Component is executed
+        """
+        return []
+
 
 COMPONENT_BASE_CLASS = Component
+
 
 def make_property(name):
     backing_field = '_' + name

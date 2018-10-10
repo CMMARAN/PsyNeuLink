@@ -340,6 +340,7 @@ Class Reference
 
 """
 
+import itertools
 import numpy as np
 import threading
 import typecheck as tc
@@ -1237,16 +1238,6 @@ class ControlMechanism(AdaptiveMechanism_Base):
         for aff in self._objective_mechanism.afferents:
                 aff._activate_for_compositions(compositions)
 
-    def _initialize_from_context(self, execution_context, base_execution_context=None, override=True):
-        self.objective_mechanism._initialize_from_context(execution_context, base_execution_context, override)
-
-        super()._initialize_from_context(execution_context, base_execution_context, override)
-
-    def _assign_context_values(self, execution_id, base_execution_id=None, **kwargs):
-        self.objective_mechanism._assign_context_values(execution_id, base_execution_id, **kwargs)
-
-        super()._assign_context_values(execution_id, base_execution_id, **kwargs)
-
     @property
     def monitored_output_states(self):
         try:
@@ -1308,3 +1299,10 @@ class ControlMechanism(AdaptiveMechanism_Base):
                 self._sim_counts[execution_id] = 1
 
         return '{0}-sim-{1}'.format(execution_id, sim_num)
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            [self.objective_mechanism],
+        ))

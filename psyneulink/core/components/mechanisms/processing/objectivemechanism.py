@@ -327,7 +327,7 @@ Class Reference
 ---------------
 
 """
-import warnings
+import itertools
 
 from collections import Iterable
 
@@ -773,18 +773,6 @@ class ObjectiveMechanism(ProcessingMechanism_Base):
                 self.function_object.exponents = [[exponent or DEFAULT_EXPONENT] for exponent in exponents]
         assert True
 
-    def _initialize_from_context(self, execution_context, base_execution_context=None, override=True):
-        for state in self.monitored_output_states:
-            state._initialize_from_context(execution_context, base_execution_context, override)
-
-        super()._initialize_from_context(execution_context, base_execution_context, override)
-
-    def _assign_context_values(self, execution_id, base_execution_id=None, **kwargs):
-        for state in self.monitored_output_states:
-            state._assign_context_values(execution_id, base_execution_id, **kwargs)
-
-        super()._assign_context_values(execution_id, base_execution_id, **kwargs)
-
     @property
     def monitored_output_states(self):
         if not isinstance(self.input_states, ContentAddressableList):
@@ -817,6 +805,13 @@ class ObjectiveMechanism(ProcessingMechanism_Base):
         weights = [w[0] for w in weights_and_exponents_tuples]
         exponents = [e[1] for e in weights_and_exponents_tuples]
         self._instantiate_weights_and_exponents(weights, exponents)
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            self.monitored_output_states,
+        ))
 
 def _objective_mechanism_role(mech, role):
     if isinstance(mech, ObjectiveMechanism):

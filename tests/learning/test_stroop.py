@@ -248,7 +248,6 @@ class TestStroop:
             (response.output_states[0].parameters.value.get(s), np.array([0.51044657, 0.5483048])),
             (objective_response.output_states[0].parameters.value.get(s), np.array([0.48955343, 0.4516952])),
             (objective_response.output_states[MSE].parameters.value.get(s), np.array(0.22184555903789838)),
-            (objective_hidden.output_states[0].parameters.value.get(s), np.array([0., 0.])),
             (CH_Weights.get_mod_matrix(s), np.array([
                 [ 0.02512045, 1.02167245],
                 [ 2.02512045, 3.02167245],
@@ -270,3 +269,8 @@ class TestStroop:
             # if you do not specify, assert_allcose will use a relative tolerance of 1e-07,
             # which WILL FAIL unless you gather higher precision values to use as reference
             np.testing.assert_allclose(val, expected, atol=1e-08, err_msg='Failed on expected_output[{0}]'.format(i))
+
+        # KDM 10/16/18: Comparator Mechanism for Hidden is not executed by the system, because it's not associated with
+        # an output mechanism. So it actually should be None instead of previously [0, 0] which was likely
+        # a side effect with of conflation of different execution contexts
+        assert objective_hidden.output_states[0].parameters.value.get(s) is None

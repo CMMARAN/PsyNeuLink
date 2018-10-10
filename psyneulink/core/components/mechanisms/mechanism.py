@@ -930,6 +930,7 @@ Class Reference
 """
 
 import inspect
+import itertools
 import logging
 import warnings
 
@@ -2138,31 +2139,6 @@ class Mechanism_Base(Mechanism):
             return self._parameter_states[param_name].parameters.value.get(execution_id)
         except (AttributeError, TypeError):
             return getattr(self.parameters, param_name).get(execution_id)
-
-    # below two methods are repetitive. A combined version of them is welcome
-    def _initialize_from_context(self, execution_context, base_execution_context=None, override=True):
-        for input_state in self.input_states:
-            input_state._initialize_from_context(execution_context, base_execution_context, override)
-
-        for output_state in self.output_states:
-            output_state._initialize_from_context(execution_context, base_execution_context, override)
-
-        for parameter_state in self.parameter_states:
-            parameter_state._initialize_from_context(execution_context, base_execution_context, override)
-
-        super()._initialize_from_context(execution_context, base_execution_context, override)
-
-    def _assign_context_values(self, execution_id, base_execution_id=None, **kwargs):
-        for input_state in self.input_states:
-            input_state._assign_context_values(execution_id, base_execution_id, **kwargs)
-
-        for output_state in self.output_states:
-            output_state._assign_context_values(execution_id, base_execution_id, **kwargs)
-
-        for parameter_state in self.parameter_states:
-            parameter_state._assign_context_values(execution_id, base_execution_id, **kwargs)
-
-        super()._assign_context_values(execution_id, base_execution_id, **kwargs)
 
     def execute(self,
                 input=None,
@@ -3526,6 +3502,17 @@ class Mechanism_Base(Mechanism):
         except KeyError:
             pass
         return attribs_dict
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            [self.function_object],
+            self.input_states,
+            self.output_states,
+            self.parameter_states,
+        ))
+
 
 def _is_mechanism_spec(spec):
     """Evaluate whether spec is a valid Mechanism specification

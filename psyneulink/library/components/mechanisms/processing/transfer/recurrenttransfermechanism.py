@@ -167,6 +167,7 @@ Class Reference
 
 """
 
+import itertools
 import numbers
 import numpy as np
 import typecheck as tc
@@ -1129,8 +1130,10 @@ class RecurrentTransferMechanism(TransferMechanism):
 
     @matrix.setter
     def matrix(self, val): # simplified version of standard setter (in Component.py)
-        if hasattr(self, "recurrent_projection"):
-            self.recurrent_projection.parameter_states["matrix"].function_object.previous_value = val
+        # KDM 10/12/18: removing below because it doesn't seem to be correct, and also causes
+        # unexpected values to be set to previous_value
+        # if hasattr(self, "recurrent_projection"):
+        #     self.recurrent_projection.parameter_states["matrix"].function_object.previous_value = val
         if hasattr(self, '_parameter_states')\
                 and 'auto' in self._parameter_states and 'hetero' in self._parameter_states:
             if hasattr(self, 'size'):
@@ -1363,11 +1366,6 @@ class RecurrentTransferMechanism(TransferMechanism):
             super().reinitialize(*args, execution_context=execution_context)
         self.parameters.previous_value.set(None, execution_context, override=True)
 
-    def _initialize_from_context(self, execution_context, base_execution_context=None, override=True):
-        self.recurrent_projection._initialize_from_context(execution_context, base_execution_context, override)
-
-        super()._initialize_from_context(execution_context, base_execution_context, override)
-
     @property
     def _learning_signal_source(self):
         '''Return default source of learning signal (`Primary OutputState <OutputState_Primary>)`
@@ -1469,3 +1467,16 @@ class RecurrentTransferMechanism(TransferMechanism):
         builder.store(builder.load(arg_out), old_val)
 
         return builder
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            [self.recurrent_projection],
+            [self.combination_function] if (
+                self.combination_function is not None
+                and not isinstance(self.combination_function, MethodType)
+                and self.has_recurrent_input_state
+            )
+            else [],
+        ))

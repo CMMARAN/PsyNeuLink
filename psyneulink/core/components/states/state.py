@@ -730,6 +730,7 @@ Class Reference
 """
 
 import inspect
+import itertools
 import numbers
 import warnings
 
@@ -2075,18 +2076,6 @@ class State_Base(State):
                 return label
         return self.parameters.value.get(execution_context)
 
-    def _initialize_from_context(self, execution_context=None, base_execution_context=None, override=True):
-        for eff in self.efferents:
-            eff._initialize_from_context(execution_context, base_execution_context, override)
-
-        super()._initialize_from_context(execution_context, base_execution_context, override)
-
-    def _assign_context_values(self, execution_id, base_execution_id=None, **kwargs):
-        for eff in self.efferents:
-            eff._assign_context_values(execution_id, base_execution_id, **kwargs)
-
-        super()._assign_context_values(execution_id, base_execution_id, **kwargs)
-
     @property
     def owner(self):
         return self._owner
@@ -2153,6 +2142,14 @@ class State_Base(State):
         (e.g., InputState must sometimes embed its variable in a list-- see InputState._get_state_function_value).
         """
         return function.execute(variable)
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            [self.function_object],
+            self.efferents,
+        ))
 
 
 def _instantiate_state_list(owner,

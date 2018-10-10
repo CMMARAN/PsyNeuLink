@@ -425,6 +425,7 @@ Class Reference
 """
 
 import inspect
+import itertools
 import logging
 import math
 import numbers
@@ -3579,20 +3580,6 @@ class System(System_Base):
     def _add_projection(self, projection):
         self.projections.append(projection)
 
-    def _initialize_from_context(self, execution_context, base_execution_context=None, override=True):
-        for mech in self.mechanisms:
-            mech._initialize_from_context(execution_context, base_execution_context, override)
-
-        for proj in self.projections:
-            proj._initialize_from_context(execution_context, base_execution_context, override)
-
-        try:
-            self.controller._initialize_from_context(execution_context, base_execution_context, override)
-        except AttributeError:
-            pass
-
-        super()._initialize_from_context(execution_context, base_execution_context, override)
-
     @property
     def function(self):
         return self.execute
@@ -3752,6 +3739,16 @@ class System(System_Base):
 
         else:
             raise SystemError("Unrecognized node type ({}) in graph for {}".format(item, self.name))
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            super()._dependent_components,
+            self.execution_list,
+            self.learning_execution_list,
+            self.projections,
+            [self.controller] if self.controller is not None else [],
+        ))
 
     def show_graph(self,
                    show_processes = False,
@@ -5018,3 +5015,9 @@ class SystemInputState(OutputState):
         self.defaults = Defaults(owner=self, variable=variable, value=variable)
 
         self.parameters.value.set(variable, override=True)
+
+    @property
+    def _dependent_components(self):
+        return list(itertools.chain(
+            self.efferents,
+        ))
