@@ -26,6 +26,9 @@ matrix:
     dist: xenial # Python 3.7 is only available on xenial because of deps
     sudo: required
 
+  - language: generic # Python is preinstalled
+    os: windows
+
   - os: osx
     python: 3.5
     language: generic
@@ -107,6 +110,9 @@ before_install: |
     python -m pip install -U setuptools-git
 
     HOMEBREW_NO_AUTO_UPDATE=1 brew install graphviz
+  elif [ "$TRAVIS_OS_NAME" == "osx" ]; then
+    choco upgrade graphviz.portable -y
+    pip --version
   fi
 
 script:
