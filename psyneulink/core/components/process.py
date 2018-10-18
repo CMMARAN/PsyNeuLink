@@ -1805,7 +1805,7 @@ class Process(Process_Base):
         if input is None:
             input = self.first_mechanism.instance_defaults.variable
             if (self.prefs.verbosePref and not (context == ContextFlags.COMMAND_LINE or
-                                                self.context.initializaton_status == ContextFlags.INITIALIZING)):
+                                                self.parameters.context.get(execution_id).initializaton_status == ContextFlags.INITIALIZING)):
                 print("- No input provided;  default will be used: {0}")
 
         else:
@@ -2202,9 +2202,12 @@ class Process(Process_Base):
 
         if not context:
             context = ContextFlags.COMPOSITION
-            self.context.execution_phase = ContextFlags.PROCESSING
-            self.context.source = context
-            self.context.string = EXECUTING + " " + PROCESS + " " + self.name
+            self._assign_context_values(
+                execution_id,
+                execution_phase=ContextFlags.PROCESSING,
+                source=context,
+                string=EXECUTING + " " + PROCESS + " " + self.name
+            )
 
         if execution_id is None:
             execution_id = self.default_execution_id
@@ -2220,7 +2223,7 @@ class Process(Process_Base):
         self._initialize_from_context(execution_id, base_execution_id, override=False)
 
         # Report output if reporting preference is on and this is not an initialization run
-        report_output = self.prefs.reportOutputPref and self.context.initialization_status == ContextFlags.INITIALIZED
+        report_output = self.prefs.reportOutputPref and self.parameters.context.get(execution_id).initialization_status == ContextFlags.INITIALIZED
 
         # FIX: CONSOLIDATE/REARRANGE _assign_input_values, _check_args, AND ASSIGNMENT OF input TO variable
         # FIX: (SO THAT assign_input_value DOESN'T HAVE TO RETURN input
@@ -2244,10 +2247,10 @@ class Process(Process_Base):
 
             # Execute Mechanism
             # Note:  DON'T include input arg, as that will be resolved by mechanism from its sender projections
-            mechanism.context.execution_phase = ContextFlags.PROCESSING
+            mechanism.parameters.context.get(execution_id).execution_phase = ContextFlags.PROCESSING
             context = ContextFlags.PROCESS
             mechanism.execute(execution_id=execution_id, context=context)
-            mechanism.context.execution_phase = ContextFlags.IDLE
+            mechanism.parameters.context.get(execution_id).execution_phase = ContextFlags.IDLE
 
             if report_output:
                 # FIX: USE clamp_input OPTION HERE, AND ADD HARD_CLAMP AND SOFT_CLAMP
@@ -2312,15 +2315,17 @@ class Process(Process_Base):
         # THEN, execute ComparatorMechanism and LearningMechanism
 
         for mechanism in self._learning_mechs:
-            mechanism.context.execution_phase = ContextFlags.LEARNING
+            mechanism._assign_context_values(execution_id, execution_phase=ContextFlags.LEARNING)
             mechanism.execute(execution_id=execution_id, context=context)
-            mechanism.context.execution_phase = ContextFlags.IDLE
+            mechanism._assign_context_values(execution_id, execution_phase=ContextFlags.IDLE)
 
         # FINALLY, execute LearningProjections to MappingProjections in the process' pathway
         for mech in self._mechs:
-
-            mech.context.execution_phase = ContextFlags.LEARNING
-            mech.context.string = self.context.string.replace(EXECUTING, LEARNING + ' ')
+            mech._assign_context_values(execution_id, execution_phase=ContextFlags.LEARNING)
+            mech._assign_context_values(
+                execution_id,
+                string=self.parameters.context.get(execution_id).string.replace(EXECUTING, LEARNING + ' ')
+            )
 
             # IMPLEMENTATION NOTE:
             #    This implementation restricts learning to ParameterStates of projections to input_states
@@ -2344,8 +2349,11 @@ class Process(Process_Base):
                     #    as the ParameterStates are assigned their owner's context in their update methods
                     # Note: do this rather just calling LearningSignals directly
                     #       since parameter_state.update() handles parsing of LearningProjection-specific params
-                    projection.context.string = self.context.string.replace(EXECUTING, LEARNING + ' ')
-                    projection.context.execution_phase = ContextFlags.LEARNING
+                    projection._assign_context_values(
+                        execution_id,
+                        string=self.parameters.context.get(execution_id).string.replace(EXECUTING, LEARNING + ' '),
+                        execution_phase=ContextFlags.LEARNING
+                    )
 
                     # For each parameter_state of the Projection
                     try:
@@ -2370,11 +2378,13 @@ class Process(Process_Base):
                                                format(e.args[0], parameter_state.name, ParameterState.__name__,
                                                       projection.name))
 
-                    projection.context.execution_phase = ContextFlags.IDLE
+                    projection._assign_context_values(execution_id, execution_phase=ContextFlags.IDLE)
 
-            mech.context.execution_phase = ContextFlags.IDLE
-            mech.context.string = self.context.string.replace(LEARNING, EXECUTING)
-
+            mech._assign_context_values(
+                execution_id,
+                execution_phase=ContextFlags.IDLE,
+                string=self.parameters.context.get(execution_id).string.replace(LEARNING, EXECUTING)
+            )
 
     def run(self,
             inputs,
