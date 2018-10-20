@@ -2835,9 +2835,9 @@ class System(System_Base):
 
             except AttributeError as error_msg:
                 if self.context.initialization_status != ContextFlags.INITIALIZING:
-                    raise SystemError("PROGRAM ERROR: Problem executing controller ({}) for {}: unidentified "
-                                      "attribute (\'{}\') encountered for it or one of the methods it calls."
-                                      .format(self.controller.name, self.name, error_msg.args[0]))
+                    error_msg.args += ("PROGRAM ERROR: Problem executing controller ({}) for {}".format(self.controller.name, self.name),)
+                    raise
+
             self.context.execution_phase = ContextFlags.IDLE
 
         # Report completion of system execution and value of designated outputs
@@ -5002,7 +5002,6 @@ class SystemInputState(OutputState):
         self.context.string = context
         self.prefs = prefs
         self.log = Log(owner=self)
-        self.recording = False
         self.efferents = []
         self.owner = owner
 

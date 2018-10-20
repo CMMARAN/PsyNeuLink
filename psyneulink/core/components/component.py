@@ -1363,7 +1363,6 @@ class Component(object, metaclass=ComponentsMeta):
         # + parameter_validation
         + user_params
         +._runtime_params_reset
-        + recording
 
     Instance methods:
         + function (implementation is optional; aliased to params[FUNCTION] by default)
@@ -1580,7 +1579,6 @@ class Component(object, metaclass=ComponentsMeta):
         # ASSIGN LOG
         from psyneulink.core.globals.log import Log
         self.log = Log(owner=self)
-        self.recording = False
         # Used by run to store return value of execute
         self.results = []
 
@@ -3907,7 +3905,14 @@ def make_property(name):
         return getattr(self, backing_field)
 
     def setter(self, val):
-        if self.paramValidationPref and hasattr(self, PARAMS_CURRENT):
+        if (
+            hasattr(self, '_prefs')
+            and self.paramValidationPref
+            and hasattr(self, PARAMS_CURRENT)
+            and hasattr(self, 'user_params_for_instantiation')
+            and hasattr(self, 'user_params')
+            and hasattr(self, 'paramInstanceDefaults')
+        ):
             self._assign_params(request_set={name:val}, context=ContextFlags.PROPERTY)
         else:
             setattr(self, backing_field, val)
@@ -3919,7 +3924,7 @@ def make_property(name):
         # If Component is a Function and has an owner, update function_params dict for owner
         #    also, get parameter_state_owner if one exists
         from psyneulink.core.components.functions.function import Function_Base
-        if isinstance(self, Function_Base) and self.owner:
+        if isinstance(self, Function_Base) and hasattr(self, 'owner') and self.owner is not None:
             param_state_owner = self.owner
             # NOTE CW 1/26/18: if you're getting an error (such as "self.owner has no attribute function_params", or
             # "function_params" has no attribute __additem__ (this happens when it's a dict rather than a

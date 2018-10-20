@@ -136,6 +136,9 @@ class ProcessingMechanism_Base(Mechanism_Base):
     #     kwPreferenceSetName: 'ProcessingMechanismClassPreferences',
     #     kp<pref>: <setting>...}
 
+    class Params(Mechanism_Base.Params):
+        has_initializers = False
+
     def __init__(self,
                  default_variable=None,
                  size=None,

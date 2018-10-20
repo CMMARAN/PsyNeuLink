@@ -2143,7 +2143,6 @@ class Mechanism_Base(Mechanism):
                 input=None,
                 execution_id=None,
                 runtime_params=None,
-                ignore_execution_id = False,
                 context=None,
                 bin_execute=False):
         """Carry out a single `execution <Mechanism_Execution>` of the Mechanism.
@@ -2200,7 +2199,6 @@ class Mechanism_Base(Mechanism):
             <Mechanism_OutputStates>` after either one `TIME_STEP` or a `TRIAL`.
 
         """
-        self.ignore_execution_id = ignore_execution_id
         context = context or ContextFlags.COMMAND_LINE
 
         # initialize context for this execution_id if not done already
