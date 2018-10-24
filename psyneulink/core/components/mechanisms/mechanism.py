@@ -2268,6 +2268,7 @@ class Mechanism_Base(Mechanism):
         self._check_args(
             params=runtime_params,
             target_set=runtime_params,
+            execution_id=execution_id,
         )
 
         # MODIFIED 7/14/18 NEW:

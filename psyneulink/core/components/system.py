@@ -2909,12 +2909,16 @@ class System(System_Base):
                 self._component_execution_count += 1
 
                 # Reset runtime params and context
-                for key in mechanism._runtime_params_reset:
-                    mechanism._set_parameter_value(key, mechanism._runtime_params_reset[key], execution_id)
-                mechanism._runtime_params_reset = {}
-                for key in mechanism.function_object._runtime_params_reset:
-                    mechanism.function_object._set_parameter_value(key, mechanism.function_object._runtime_params_reset[key], execution_id)
-                mechanism.function_object._runtime_params_reset = {}
+                if execution_id in mechanism._runtime_params_reset:
+                    for key in mechanism._runtime_params_reset[execution_id]:
+                        mechanism._set_parameter_value(key, mechanism._runtime_params_reset[execution_id][key], execution_id)
+                mechanism._runtime_params_reset[execution_id] = {}
+
+                if execution_id in mechanism.function_object._runtime_params_reset:
+                    for key in mechanism.function_object._runtime_params_reset[execution_id]:
+                        mechanism.function_object._set_parameter_value(key, mechanism.function_object._runtime_params_reset[execution_id][key], execution_id)
+                mechanism.function_object._runtime_params_reset[execution_id] = {}
+
                 mechanism.parameters.context.get(execution_id).execution_phase = ContextFlags.IDLE
 
                 if self._report_system_output and  self._report_process_output:

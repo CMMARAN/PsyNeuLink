@@ -9171,9 +9171,10 @@ class AccumulatorIntegrator(Integrator):  # ------------------------------------
 
         # If params have been passed, treat as runtime params and assign to paramsCurrent
         #   (relabel params as runtime_params for clarity)
-        for key in self._runtime_params_reset:
-            self._set_parameter_value(key, self._runtime_params_reset[key], execution_id)
-        self._runtime_params_reset = {}
+        if execution_id in self._runtime_params_reset:
+            for key in self._runtime_params_reset[execution_id]:
+                self._set_parameter_value(key, self._runtime_params_reset[execution_id][key], execution_id)
+        self._runtime_params_reset[execution_id] = {}
 
         runtime_params = params
         if runtime_params:
@@ -9181,7 +9182,9 @@ class AccumulatorIntegrator(Integrator):  # ------------------------------------
                 if hasattr(self, param_name):
                     if param_name in {FUNCTION, INPUT_STATES, OUTPUT_STATES}:
                         continue
-                    self._runtime_params_reset[param_name] = getattr(self, param_name)
+                    if execution_id not in self._runtime_params_reset:
+                        self._runtime_params_reset[execution_id] = {}
+                    self._runtime_params_reset[execution_id][param_name] = getattr(self.parameters, param_name).get(execution_id)
                     self._set_parameter_value(param_name, runtime_params[param_name], execution_id)
 
     def function(self,
