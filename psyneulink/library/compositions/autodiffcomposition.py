@@ -215,6 +215,7 @@ class AutodiffComposition(Composition):
                  param_init_from_pnl=True,
                  patience=None,
                  min_delta=0,
+                 learning_rate=0.5,
                  name="autodiff_composition"):
 
         self.learning_enabled = True
@@ -222,23 +223,18 @@ class AutodiffComposition(Composition):
             raise AutodiffCompositionError('Pytorch python module (torch) is not installed. Please install it with '
                                            '`pip install torch` or `pip3 install torch`')
 
-        self.name = name
-
         super(AutodiffComposition, self).__init__()
 
         # set up target CIM
-        self.target_CIM = CompositionInterfaceMechanism(name=self.name + " Target_CIM",
-                                                        composition=self)
-        self.target_CIM_states = {}
-
-        # prevent CIM's from printing their input & output whenever an autodiff composition is run
-        self.input_CIM.reportOutputPref = False
-        self.output_CIM.reportOutputPref = False
-        self.target_CIM.reportOutputPref = False
-
+        # self.target_CIM = CompositionInterfaceMechanism(name=self.name + " Target_CIM",
+        #                                                 composition=self)
+        # self.target_CIM_states = {}
+        self.learning_CIM = CompositionInterfaceMechanism(name=self.name + "Learning_CIM",
+                                                          composition=self)
+        self.learning_rate = learning_rate
         # pytorch representation of model and associated training parameters
         self.pytorch_representation = None
-        self.learning_rate = None
+        # self.learning_rate = None
         self.optimizer = None
         self.loss = None
 
@@ -257,204 +253,23 @@ class AutodiffComposition(Composition):
 
         self.min_delta = min_delta
 
-
-    # TODO (CW 9/28): this mirrors _create_CIM_states() in Composition but doesn't call super().
-    #   This is not ideal, but I don't see a simple way to rewrite this function to call super().
-    # Very similar to the same function for the normal composition.
-    # Overriden to create target CIM as well as input and output CIM's
-    # def _create_CIM_states(self):
-    #
-    #     #  INPUT CIM
-    #     # loop over all origin nodes
-    #
-    #     current_origin_input_states = set()
-    #
-    #     for node in self.get_c_nodes_by_role(CNodeRole.ORIGIN):
-    #
-    #         for input_state in node.external_input_states:
-    #             current_origin_input_states.add(input_state)
-    #
-    #             # if there are no CIM input and output states for the origin node input state, add them
-    #             if input_state not in set(self.input_CIM_states.keys()):
-    #
-    #                 interface_input_state = InputState(owner=self.input_CIM,
-    #                                                    variable=input_state.value,
-    #                                                    reference_value=input_state.value,
-    #                                                    name="INPUT_CIM_" + node.name + "_" + input_state.name)
-    #
-    #                 interface_output_state = OutputState(owner=self.input_CIM,
-    #                                                      variable=OWNER_VALUE,
-    #                                                      default_variable=self.input_CIM.variable,
-    #                                                      function=InterfaceStateMap(corresponding_input_state=interface_input_state),
-    #                                                      name="INPUT_CIM_" + node.name + "_" + input_state.name)
-    #
-    #                 self.input_CIM_states[input_state] = [interface_input_state, interface_output_state]
-    #
-    #
-    #     sends_to_input_states = set(self.input_CIM_states.keys())
-    #
-    #     # For any state still registered on the CIM that does not map to a corresponding ORIGIN node I.S.:
-    #     for input_state in sends_to_input_states.difference(current_origin_input_states):
-    #
-    #         # remove the CIM input and output states associated with this Origin node input state
-    #         self.input_CIM.input_states.remove(self.input_CIM_states[input_state][0])
-    #         self.input_CIM.output_states.remove(self.input_CIM_states[input_state][1])
-    #
-    #         # and from the dictionary of CIM output state/input state pairs
-    #         del self.input_CIM_states[input_state]
-    #
-    #
-    #     # OUTPUT AND TARGET CIM's
-    #     # loop over all terminal nodes
-    #
-    #     current_terminal_output_states = set()
-    #     current_terminal_input_states = set()
-    #
-    #     for node in self.get_c_nodes_by_role(CNodeRole.TERMINAL):
-    #
-    #         for output_state in node.output_states:
-    #             current_terminal_output_states.add(output_state)
-    #
-    #             # if there are no CIM input and output states for the origin node output state, add them
-    #             if output_state not in set(self.output_CIM_states.keys()):
-    #
-    #                 interface_input_state = InputState(owner=self.output_CIM,
-    #                                                    variable=output_state.value,
-    #                                                    reference_value=output_state.value,
-    #                                                    name="OUTPUT_CIM_" + node.name + "_" + output_state.name)
-    #
-    #                 interface_output_state = OutputState(
-    #                         owner=self.output_CIM,
-    #                         variable=OWNER_VALUE,
-    #                         function=InterfaceStateMap(corresponding_input_state=interface_input_state),
-    #                         reference_value=output_state.value,
-    #                         name="OUTPUT_CIM_" + node.name + "_" + output_state.name)
-    #
-    #                 self.output_CIM_states[output_state] = [interface_input_state, interface_output_state]
-    #
-    #         for input_state in node.input_states:
-    #             current_terminal_input_states.add(input_state)
-    #
-    #             # if there are no CIM input and output states for the origin node input state, add them
-    #             if input_state not in set(self.target_CIM_states.keys()):
-    #
-    #                 interface_input_state = InputState(owner=self.target_CIM,
-    #                                                    variable=input_state.value,
-    #                                                    reference_value=input_state.value,
-    #                                                    name="TARGET_CIM_" + node.name + "_" + input_state.name)
-    #
-    #                 interface_output_state = OutputState(
-    #                         owner=self.target_CIM,
-    #                         variable=OWNER_VALUE,
-    #                         function=InterfaceStateMap(corresponding_input_state=interface_input_state),
-    #                         reference_value=input_state.value,
-    #                         name="TARGET_CIM_" + node.name + "_" + input_state.name)
-    #
-    #                 self.target_CIM_states[input_state] = [interface_input_state, interface_output_state]
-    #
-    #
-    #     previous_terminal_output_states = set(self.output_CIM_states.keys())
-    #
-    #     # For any states still registered on the CIM that does not map to a corresponding ORIGIN node I.S.:
-    #     for output_state in previous_terminal_output_states.difference(current_terminal_output_states):
-    #
-    #         # remove the CIM input and output states associated with this Terminal Node output state
-    #         self.output_CIM.remove_states(self.output_CIM_states[output_state][0])
-    #         self.output_CIM.remove_states(self.output_CIM_states[output_state][1])
-    #
-    #         # and from the dictionary of CIM output state/input state pairs
-    #         del self.output_CIM_states[output_state]
-    #
-    #     previous_terminal_target_states = set(self.target_CIM_states.keys())
-    #
-    #     # For any states still registered on the CIM that does not map to a corresponding ORIGIN node I.S.:
-    #     for target_state in previous_terminal_target_states.difference(current_terminal_input_states):
-    #
-    #         # remove the CIM input and output states associated with this Terminal Node output state
-    #         self.target_CIM.remove_states(self.output_CIM_states[output_state][0])
-    #         self.target_CIM.remove_states(self.output_CIM_states[output_state][1])
-    #
-    #         # and from the dictionary of CIM output state/input state pairs
-    #         del self.target_CIM_states[target_state]
-    #
-    #
-    #     # set CIM's as connected to composition, remove their default input/output states
-    #     if not self.input_CIM.connected_to_composition:
-    #         self.input_CIM.input_states.remove(self.input_CIM.input_state)
-    #         self.input_CIM.output_states.remove(self.input_CIM.output_state)
-    #         self.input_CIM.connected_to_composition = True
-    #
-    #     if not self.output_CIM.connected_to_composition:
-    #         self.output_CIM.input_states.remove(self.output_CIM.input_state)
-    #         self.output_CIM.output_states.remove(self.output_CIM.output_state)
-    #         self.output_CIM.connected_to_composition = True
-    #
-    #     if not self.target_CIM.connected_to_composition:
-    #         self.target_CIM.input_states.remove(self.target_CIM.input_state)
-    #         self.target_CIM.output_states.remove(self.target_CIM.output_state)
-    #         self.target_CIM.connected_to_composition = True
-    #
-    # def _assign_execution_ids(self, execution_id=None):
-    #
-    #     exec_id = super()._assign_execution_ids(execution_id=execution_id)
-    #
-    #     self.target_CIM._execution_id = exec_id
-    #
-    #     return exec_id
-
-    # similar function to _assign_values_to_input_CIM from the normal composition - however, this
-    # assigns values to the input or target CIM of autodiff composition,
-    # executes the CIM's, and puts the values in appropriate form for pytorch
-    def _throw_through_input_CIM(self, stimuli, inputs_or_targets):
-
-        # set up some variables to use based on whether we have inputs or targets
-        if inputs_or_targets == 'inputs':
-            CIM = self.input_CIM
-            states = self.input_CIM_states
-            order = self.ordered_execution_sets[0]
-        else:
-            CIM = self.target_CIM
-            states = self.target_CIM_states
-            order = self.ordered_execution_sets[len(self.ordered_execution_sets)-1]
-
-        # set up list that will hold values for CIM
-        CIM_list = []
-
-        # add values to CIM list in correct order
-        for input_state in CIM.input_states:
-
-            for key in states:
-                if states[key][0] == input_state:
-                    node_state = key
-                    node = key.owner
-                    index = node.input_states.index(node_state)
-
-                    if node in stimuli:
-                        value = stimuli[node][index]
-
-                    else:
-                        value = node.instance_defaults.variable[index]
-
-            CIM_list.append(value)
-
-        # execute CIM
-        CIM.execute(CIM_list)
-
-        # set up list that will hold values for pytorch
-        pytorch_list = []
-
-        # iterate over nodes in pytorch's desired order, add corresponding inputs from CIM
-        # output to pytorch list in that order. convert them to torch tensors in the process
-        for i in range(len(order)):
-
-            # get output state corresponding to ith node in pytorch's desired order, add
-            # the value of the output state to pytorch list at position i
-            node = order[i]
-            value = states[node.component.input_states[0]][1].value
-            value_for_pytorch = torch.from_numpy(np.asarray(value).copy()).double()
-            pytorch_list.append(value_for_pytorch)
-
-        return pytorch_list
+    def _reshape_for_autodiff(self, stimuli):
+        order = {"inputs": self.ordered_execution_sets[0],
+                 "targets": self.ordered_execution_sets[len(self.ordered_execution_sets)-1]}
+        pytorch_stimuli = {}
+        for stimulus_type in order:
+            pytorch_list = []
+            # iterate over nodes in pytorch's desired order, add corresponding inputs from CIM
+            # output to pytorch list in that order. convert them to torch tensors in the process
+            for i in range(len(order[stimulus_type])):
+                # get output state corresponding to ith node in pytorch's desired order, add
+                # the value of the output state to pytorch list at position i
+                node = order[stimulus_type][i].component
+                value = stimuli[stimulus_type][node]
+                value_for_pytorch = torch.from_numpy(np.asarray(value).copy()).double()
+                pytorch_list.append(value_for_pytorch)
+            pytorch_stimuli[stimulus_type] = pytorch_list
+        return pytorch_stimuli
 
     # similar function to _throw_through_input_CIM - however, this gets pytorch output from execute,
     # assigns it to the output CIM of autodiff composition, executes the CIM, and sends
@@ -606,21 +421,60 @@ class AutodiffComposition(Composition):
                 call_after_time_step=None,
                 call_after_pass=None,
                 execution_id=None,
+                optimizer=None,
+                loss=None,
                 clamp_input=SOFT_CLAMP,
                 targets=None,
                 runtime_params=None,
                 bin_execute=False,
                 context=None
         ):
+
         if self.learning_enabled:
+
+            # set up mechanism execution order
+            if self.ordered_execution_sets is None:
+                self.ordered_execution_sets = self.get_ordered_exec_sets(self.graph_processing)
+
+            # set up pytorch representation of the autodiff composition's model
+            if self.pytorch_representation is None:
+                self.pytorch_representation = PytorchModelCreator(self.graph_processing, self.param_init_from_pnl,
+                                                                  self.ordered_execution_sets)
+
+            if optimizer is None:
+                if self.optimizer is None:
+                    self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
+            else:
+                if optimizer not in ['sgd', 'adam']:
+                    raise AutodiffCompositionError("Invalid optimizer specified. Optimizer argument must be a string. "
+                                                   "Currently, Stochastic Gradient Descent and Adam are the only available "
+                                                   "optimizers (specified as 'sgd' or 'adam').")
+                if optimizer == 'sgd':
+                    self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
+                else:
+                    self.optimizer = optim.Adam(self.pytorch_representation.parameters(), lr=self.learning_rate)
+
+            if loss is None:
+                if self.loss is None:
+                    self.loss = nn.MSELoss(reduction='sum')
+            else:
+                if loss not in ['mse', 'crossentropy']:
+                    raise AutodiffCompositionError("Invalid loss specified. Loss argument must be a string. "
+                                                   "Currently, Mean Squared Error and Cross Entropy are the only "
+                                                   "available loss functions (specified as 'mse' or 'crossentropy').")
+                if loss == 'mse':
+                    self.loss = nn.MSELoss(reduction='sum')
+                else:
+                    self.loss = nn.CrossEntropyLoss(reduction='sum')
+
             if execution_id is None:
                 execution_id = self._assign_execution_ids(execution_id)
 
-            autodiff_inputs = self.reshape_for_autodiff(inputs["inputs"])
-            autodiff_targets = self.reshape_for_autodiff(inputs["targets"])
-            autodiff_epochs = inputs["epochs"]
-            autodiff_randomize = inputs["randomize"]
-            output = self.autodiff_training(autodiff_inputs, autodiff_targets, epochs, randomize)
+            autodiff_stimuli = self._reshape_for_autodiff(inputs)
+            autodiff_inputs = autodiff_stimuli["inputs"]
+            autodiff_targets = autodiff_stimuli["targets"]
+
+            output = self.autodiff_training(autodiff_inputs, autodiff_targets, inputs["epochs"], inputs["randomize"])
 
             return output
         
@@ -693,33 +547,7 @@ class AutodiffComposition(Composition):
         #         if not isinstance(learning_rate, (int, float)):
         #             raise AutodiffCompositionError("Learning rate must be an integer or float value.")
         #         self.learning_rate = learning_rate
-        # 
-        #     if optimizer is None:
-        #         if self.optimizer is None:
-        #             self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
-        #     else:
-        #         if optimizer not in ['sgd', 'adam']:
-        #             raise AutodiffCompositionError("Invalid optimizer specified. Optimizer argument must be a string. "
-        #                                            "Currently, Stochastic Gradient Descent and Adam are the only available "
-        #                                            "optimizers (specified as 'sgd' or 'adam').")
-        #         if optimizer == 'sgd':
-        #             self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
-        #         else:
-        #             self.optimizer = optim.Adam(self.pytorch_representation.parameters(), lr=self.learning_rate)
-        # 
-        #     if loss is None:
-        #         if self.loss is None:
-        #             self.loss = nn.MSELoss(reduction='sum')
-        #     else:
-        #         if loss not in ['mse', 'crossentropy']:
-        #             raise AutodiffCompositionError("Invalid loss specified. Loss argument must be a string. "
-        #                                            "Currently, Mean Squared Error and Cross Entropy are the only "
-        #                                            "available loss functions (specified as 'mse' or 'crossentropy').")
-        #         if loss == 'mse':
-        #             self.loss = nn.MSELoss(reduction='sum')
-        #         else:
-        #             self.loss = nn.CrossEntropyLoss(reduction='sum')
-        # 
+
         # # allow user to refresh the list tracking loss on every epoch in the autodiff composition's training history
         # if refresh_losses:
         #     self.losses = []
