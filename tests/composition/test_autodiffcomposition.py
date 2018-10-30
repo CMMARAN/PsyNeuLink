@@ -49,11 +49,12 @@ class TestACConstructor:
         assert isinstance(comp, AutodiffComposition)
         assert isinstance(comp_2, AutodiffComposition)
 
-    def test_target_CIM(self):
-        comp = AutodiffComposition()
-        assert isinstance(comp.target_CIM, CompositionInterfaceMechanism)
-        assert comp.target_CIM.composition == comp
-        assert comp.target_CIM_states == {}
+    # KAM removed this pytest 10/30 after removing target_CIM
+    # def test_target_CIM(self):
+    #     comp = AutodiffComposition()
+    #     assert isinstance(comp.target_CIM, CompositionInterfaceMechanism)
+    #     assert comp.target_CIM.composition == comp
+    #     assert comp.target_CIM_states == {}
 
     def test_pytorch_representation(self):
         comp = AutodiffComposition()
@@ -63,7 +64,7 @@ class TestACConstructor:
         comp = AutodiffComposition()
         assert comp.input_CIM.reportOutputPref == False
         assert comp.output_CIM.reportOutputPref == False
-        assert comp.target_CIM.reportOutputPref == False
+        # assert comp.target_CIM.reportOutputPref == False
 
     def test_patience(self):
         comp = AutodiffComposition(patience=10)
@@ -552,10 +553,10 @@ class TestTrainingCorrectness:
 
         # TRAIN THE MODEL
 
-        result = sem_net.run(inputs=inputs_dict,
-                             targets=targets_dict,
-                             epochs=eps,
-                             optimizer=opt)
+        result = sem_net.run(inputs=[{'inputs': inputs_dict,
+                                      'targets': targets_dict,
+                                      'epochs': eps,
+                                      'optimizer': opt}])
 
         # CHECK CORRECTNESS
 

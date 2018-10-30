@@ -2309,24 +2309,24 @@ class Composition(Composition_Base):
         # Return graph to show in jupyter
         elif output_fmt == 'jupyter':
             return G
-    def execute(
-        self,
-        inputs=None,
-        scheduler_processing=None,
-        scheduler_learning=None,
-        termination_processing=None,
-        termination_learning=None,
-        call_before_time_step=None,
-        call_before_pass=None,
-        call_after_time_step=None,
-        call_after_pass=None,
-        execution_id=None,
-        clamp_input=SOFT_CLAMP,
-        targets=None,
-        runtime_params=None,
-        bin_execute=False,
-        context=None
-    ):
+
+    def execute(self,
+                inputs=None,
+                autodiff_stimuli=None,
+                scheduler_processing=None,
+                scheduler_learning=None,
+                termination_processing=None,
+                termination_learning=None,
+                call_before_time_step=None,
+                call_before_pass=None,
+                call_after_time_step=None,
+                call_after_pass=None,
+                execution_id=None,
+                clamp_input=SOFT_CLAMP,
+                targets=None,
+                runtime_params=None,
+                bin_execute=False,
+                context=None):
         '''
             Passes inputs to any Nodes receiving inputs directly from the user (via the "inputs" argument) then
             coordinates with the Scheduler to receive and execute sets of nodes that are eligible to run until
@@ -2367,6 +2367,7 @@ class Composition(Composition_Base):
             ---------
 
             output value of the final Mechanism executed in the Composition : various
+            :param autodiff_inputs:
         '''
 
         nested = False
@@ -2514,7 +2515,18 @@ class Composition(Composition_Base):
                         node.context.execution_phase = ContextFlags.IDLE
 
                 elif isinstance(node, Composition):
-                    node.execute(execution_id=self._execution_id)
+                    # autodiff compositions must be passed extra inputs
+                    learning_enabled = False
+                    if hasattr(node, "pytorch_representation"):
+                        if node.learning_enabled:
+                            learning_enabled = True
+                    if learning_enabled:
+                        node.execute(inputs=autodiff_stimuli[node],
+                                     execution_id=self._execution_id,
+                                     context=ContextFlags.COMPOSITION)
+                    else:
+                        node.execute(execution_id=self._execution_id,
+                                     context=ContextFlags.COMPOSITION)
                 if node in origin_nodes:
                     if clamp_input:
                         if node in pulse_clamp_inputs:
@@ -2693,7 +2705,7 @@ class Composition(Composition_Base):
                 raise CompositionError("Inputs to {} must be specified in a dictionary with a key for each of its {} origin "
                                "nodes.".format(self.name, len(origin_nodes)))
 
-        inputs, num_inputs_sets = self._adjust_stimulus_dict(inputs)
+        inputs, num_inputs_sets, autodiff_stimuli = self._adjust_stimulus_dict(inputs)
 
         if num_trials is not None:
             num_trials = num_trials
@@ -2740,22 +2752,25 @@ class Composition(Composition_Base):
                     execution_stimuli[node] = inputs[node][0]
                     continue
                 execution_stimuli[node] = inputs[node][stimulus_index]
+            execution_autodiff_stimuli = {}
+            for node in autodiff_stimuli:
+                if isinstance(autodiff_stimuli[node], list):
+                    execution_autodiff_stimuli[node] = autodiff_stimuli[node][stimulus_index]
+                else:
+                    execution_autodiff_stimuli[node] = autodiff_stimuli[node]
 
             # execute processing
             # pass along the stimuli for this trial
             trial_output = self.execute(inputs=execution_stimuli,
+                                        autodiff_stimuli=execution_autodiff_stimuli,
                                         scheduler_processing=scheduler_processing,
                                         scheduler_learning=scheduler_learning,
                                         termination_processing=termination_processing,
                                         termination_learning=termination_learning,
-                                        call_before_time_step=call_before_time_step,
-                                        call_before_pass=call_before_pass,
-                                        call_after_time_step=call_after_time_step,
-                                        call_after_pass=call_after_pass,
-                                        execution_id=execution_id,
-                                        clamp_input=clamp_input,
-                                        runtime_params=runtime_params,
-                                        bin_execute=bin_execute)
+                                        call_before_time_step=call_before_time_step, call_before_pass=call_before_pass,
+                                        call_after_time_step=call_after_time_step, call_after_pass=call_after_pass,
+                                        execution_id=execution_id, clamp_input=clamp_input,
+                                        runtime_params=runtime_params, bin_execute=bin_execute)
 
         # ---------------------------------------------------------------------------------
             # store the result of this execute in case it will be the final result
@@ -3249,19 +3264,22 @@ class Composition(Composition_Base):
             return "heterogeneous"
         return False
 
-    # NOTE (CW 9/28): this is mirrored in autodiffcomposition.py, so any changes made here should also be made there
     def _adjust_stimulus_dict(self, stimuli):
+        autodiff_stimuli = {}
+        all_stimuli_keys = list(stimuli.keys())
+        for node in all_stimuli_keys:
+            if hasattr(node, "pytorch_representation"):
+                if node.learning_enabled:
+                    autodiff_stimuli[node] = stimuli[node]
+                    del stimuli[node]
 
-        # STEP 1: validate that there is a one-to-one mapping of input entries to origin nodes
-
-
-        # Check that all of the nodes listed in the inputs dict are ORIGIN nodes in the self
+        # STEP 1A: Check that all of the nodes listed in the inputs dict are ORIGIN nodes in the self
         origin_nodes = self.get_c_nodes_by_role(CNodeRole.ORIGIN)
         for node in stimuli.keys():
             if not node in origin_nodes:
                 raise CompositionError("{} in inputs dict for {} is not one of its ORIGIN nodes".
                                format(node.name, self.name))
-        # Check that all of the ORIGIN nodes are represented - if not, use default_variable
+        # STEP 1B: Check that all of the ORIGIN nodes are represented - if not, use default_external_input_values
         for node in origin_nodes:
             if not node in stimuli:
                 # Change error below to warning??
@@ -3359,7 +3377,7 @@ class Composition(Composition_Base):
                                        "lengths ({}). The same number of inputs must be provided for each node "
                                        "in a Composition.".format(self.name, nums_input_sets))
         num_input_sets = nums_input_sets.pop()
-        return adjusted_stimuli, num_input_sets
+        return adjusted_stimuli, num_input_sets, autodiff_stimuli
 
     def _adjust_execution_stimuli(self, stimuli):
         adjusted_stimuli = {}

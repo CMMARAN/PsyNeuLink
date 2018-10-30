@@ -74,41 +74,34 @@ class PathwayComposition(Composition):
                 raise PathwayCompositionError("{} is not a projection or mechanism. A linear processing pathway must be made "
                                        "up of projections and mechanisms.".format(pathway[c]))
 
-    def execute(
-        self,
-        inputs,
-        scheduler_processing=None,
-        scheduler_learning=None,
-        termination_processing=None,
-        termination_learning=None,
-        call_before_time_step=None,
-        call_before_pass=None,
-        call_after_time_step=None,
-        call_after_pass=None,
-        execution_id=None,
-        clamp_input=SOFT_CLAMP,
-        targets=None,
-        runtime_params=None,
-        bin_execute=False,
-    ):
+    def execute(self,
+                inputs=None,
+                autodiff_inputs=None,
+                scheduler_processing=None,
+                scheduler_learning=None,
+                termination_processing=None,
+                termination_learning=None,
+                call_before_time_step=None,
+                call_before_pass=None,
+                call_after_time_step=None,
+                call_after_pass=None,
+                execution_id=None,
+                clamp_input=SOFT_CLAMP,
+                targets=None,
+                runtime_params=None,
+                bin_execute=False):
 
         if isinstance(inputs, list):
             inputs = {self.get_mechanisms_by_role(CNodeRole.ORIGIN).pop(): inputs}
 
-        output = super(PathwayComposition, self).execute(
-            inputs,
-            scheduler_processing,
-            scheduler_learning,
-            termination_processing,
-            termination_learning,
-            call_before_time_step,
-            call_before_pass,
-            call_after_time_step,
-            call_after_pass,
-            execution_id,
-            clamp_input,
-            targets,
-            runtime_params,
-            bin_execute,
-        )
+        output = super(PathwayComposition, self).execute(inputs, scheduler_processing=scheduler_processing,
+                                                         scheduler_learning=scheduler_learning,
+                                                         termination_processing=termination_processing,
+                                                         termination_learning=termination_learning,
+                                                         call_before_time_step=call_before_time_step,
+                                                         call_before_pass=call_before_pass,
+                                                         call_after_time_step=call_after_time_step,
+                                                         call_after_pass=call_after_pass, execution_id=execution_id,
+                                                         clamp_input=clamp_input, targets=targets,
+                                                         runtime_params=runtime_params, bin_execute=bin_execute)
         return output

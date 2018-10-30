@@ -271,6 +271,23 @@ class AutodiffComposition(Composition):
             pytorch_stimuli[stimulus_type] = pytorch_list
         return pytorch_stimuli
 
+    def _has_required_keys(self, input_dict):
+        required_keys = set(["inputs", "targets"])
+        return required_keys.issubset(set(input_dict.keys()))
+
+    def _adjust_stimulus_dict(self, inputs):
+        if self.learning_enabled:
+            if isinstance(inputs, dict):
+                if self._has_required_keys(inputs):
+                    return [inputs]
+                raise AutodiffCompositionError("Invalid input specification.")
+            elif isinstance(inputs, list):
+                for input_dict in inputs:
+                    if self._has_required_keys(input_dict):
+                        raise AutodiffCompositionError("Invalid input specification.")
+                return inputs
+        return super(AutodiffComposition, self)._adjust_stimulus_dict(inputs)
+
     # similar function to _throw_through_input_CIM - however, this gets pytorch output from execute,
     # assigns it to the output CIM of autodiff composition, executes the CIM, and sends
     # its output in a list back to execute
@@ -404,14 +421,9 @@ class AutodiffComposition(Composition):
         else:
             return outputs
 
-    # orchestrates either processing for one input or training for a given set of
-    # inputs and targets for a provided number of epochs. Sends values through input
-    # CIM's, calls functions that perform processing/training with the pytorch
-    # representation of the model, then sends values through output CIM's.
     def execute(self,
-                epochs=None,
-                randomize=False,
                 inputs=None,
+                autodiff_inputs=None,
                 scheduler_processing=None,
                 scheduler_learning=None,
                 termination_processing=None,
@@ -421,14 +433,11 @@ class AutodiffComposition(Composition):
                 call_after_time_step=None,
                 call_after_pass=None,
                 execution_id=None,
-                optimizer=None,
-                loss=None,
                 clamp_input=SOFT_CLAMP,
                 targets=None,
                 runtime_params=None,
                 bin_execute=False,
-                context=None
-        ):
+                context=None):
 
         if self.learning_enabled:
 
@@ -441,6 +450,8 @@ class AutodiffComposition(Composition):
                 self.pytorch_representation = PytorchModelCreator(self.graph_processing, self.param_init_from_pnl,
                                                                   self.ordered_execution_sets)
 
+            # FIX: pass optimizer?
+            optimizer = None
             if optimizer is None:
                 if self.optimizer is None:
                     self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
@@ -453,7 +464,8 @@ class AutodiffComposition(Composition):
                     self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
                 else:
                     self.optimizer = optim.Adam(self.pytorch_representation.parameters(), lr=self.learning_rate)
-
+            # FIX: pass loss?
+            loss = None
             if loss is None:
                 if self.loss is None:
                     self.loss = nn.MSELoss(reduction='sum')
@@ -496,34 +508,42 @@ class AutodiffComposition(Composition):
 
 
     # what the user calls for doing processing/training, similar to the run function of the normal composition
-    def run(
-        self,
-        inputs=None,
-        scheduler_processing=None,
-        scheduler_learning=None,
-        termination_processing=None,
-        termination_learning=None,
-        execution_id=None,
-        num_trials=None,
-        call_before_time_step=None,
-        call_after_time_step=None,
-        call_before_pass=None,
-        call_after_pass=None,
-        call_before_trial=None,
-        call_after_trial=None,
-        clamp_input=SOFT_CLAMP,
-        targets=None,
-        bin_execute=False,
-        initial_values=None,
-        runtime_params=None,
-        learning_rate=None,
-        optimizer=None,
-        loss=None,
-        randomize=False,
-        refresh_losses=False,
-    ):
+    def run(self,
+            inputs=None,
+            scheduler_processing=None,
+            scheduler_learning=None,
+            termination_processing=None,
+            termination_learning=None,
+            execution_id=None,
+            num_trials=None,
+            call_before_time_step=None,
+            call_after_time_step=None,
+            call_before_pass=None,
+            call_after_pass=None,
+            call_before_trial=None,
+            call_after_trial=None,
+            clamp_input=SOFT_CLAMP,
+            targets=None,
+            bin_execute=False,
+            initial_values=None,
+            runtime_params=None,
+            learning_rate=None,
+            optimizer=None,
+            loss=None,
+            randomize=False,
+            refresh_losses=False):
+
+        adjusted_stimuli = self._adjust_stimulus_dict(inputs)
+        # TBI: Handle trials, timesteps, etc
         if self.learning_enabled:
-            return self.execute()
+            if num_trials is not None:
+                for trial_num in range(num_trials):
+                    stimulus_index = trial_num % len(adjusted_stimuli)
+                    return self.execute(inputs=adjusted_stimuli[stimulus_index])
+            else:
+                for stimulus in adjusted_stimuli:
+                    return self.execute(inputs=stimulus)
+
         return super(AutodiffComposition, self).run()
 
         # validate arguments, and properties of the autodiff composition

@@ -1830,11 +1830,7 @@ class TestRun:
         comp._analyze_graph()
         inputs_dict = {A: 3}
         sched = Scheduler(composition=comp)
-        output = comp.execute(
-            inputs=inputs_dict,
-            scheduler_processing=sched,
-            bin_execute=mode
-        )
+        output = comp.execute(inputs=inputs_dict, scheduler_processing=sched, bin_execute=mode)
         assert np.allclose([75], output)
 
     @pytest.mark.composition
@@ -1874,11 +1870,7 @@ class TestRun:
         comp._analyze_graph()
         inputs_dict = {A: [[1]]}
         sched = Scheduler(composition=comp)
-        output = comp.execute(
-            inputs=inputs_dict,
-            scheduler_processing=sched,
-            bin_execute=mode
-        )
+        output = comp.execute(inputs=inputs_dict, scheduler_processing=sched, bin_execute=mode)
         assert np.allclose(32., output)
 
     def test_LPP_end_with_projection(self):

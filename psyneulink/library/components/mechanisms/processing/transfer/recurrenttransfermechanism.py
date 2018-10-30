@@ -1306,7 +1306,7 @@ class RecurrentTransferMechanism(TransferMechanism):
 
     def _parse_function_variable(self, variable, context=None):
         if self.has_recurrent_input_state:
-            variable = self.combination_function.execute(variable=variable)
+            variable = self.combination_function.execute()
 
         return super()._parse_function_variable(variable, context)
 

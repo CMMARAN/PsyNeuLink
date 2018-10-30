@@ -2258,8 +2258,7 @@ class Component(object, metaclass=ComponentsMeta):
         elif hasattr(self, "owner"):
             if hasattr(self.owner, "parameter_states"):
                 if param in self.owner.parameter_states:
-                    new_state_value = self.owner.parameter_states[param].execute(
-                        context=ContextFlags.EXECUTING)
+                    new_state_value = self.owner.parameter_states[param].execute(context=ContextFlags.EXECUTING)
                     self.owner.parameter_states[param].value = new_state_value
 
     def _check_args(self, variable=None, params=None, target_set=None, context=None):

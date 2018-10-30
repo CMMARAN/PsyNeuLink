@@ -1260,7 +1260,7 @@ class UserDefinedFunction(Function_Base):
         >>> import psyneulink as pnl
         >>> my_mech = pnl.ProcessingMechanism(default_variable=[[0,0,0]],
         ...                                   function=lambda x:sum(x[0]))
-        >>> my_mech.execute(input = [1, 2, 3])
+        >>> my_mech.execute()
         array([[6]])
 
     Note that the function treats its argument, x, as a 2d array, and accesses its first item for the calculation.
@@ -1271,7 +1271,7 @@ class UserDefinedFunction(Function_Base):
 
         >>> my_mech = pnl.ProcessingMechanism(default_variable=[[0],[0]],
         ...                                   function=lambda x: x[0] + x[1])
-        >>> my_mech.execute(input = [[1],[2]])
+        >>> my_mech.execute()
         array([[3]])
 
     .. _UDF_Defined_Function_Examples:
@@ -1377,7 +1377,7 @@ class UserDefinedFunction(Function_Base):
         >>> def my_fct(variable):
         ...     return L.function(variable) + 2
         >>> my_mech = pnl.ProcessingMechanism(size = 3, function = my_fct)
-        >>> my_mech.execute(input = [1, 2, 3])  #doctest: +SKIP
+        >>> my_mech.execute()  #doctest: +SKIP
         array([[2.88079708, 2.98201379, 2.99752738]])
 
 
