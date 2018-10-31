@@ -9,8 +9,6 @@ except ImportError:
 
 import psyneulink as pnl
 
-from psyneulink.library.compositions.autodiffcomposition import AutodiffComposition
-
 # In this file, we create and train a neural network to approximate the XOR function (henceforth referred to
 # as an XOR model) in PsyNeuLink's System, in PsyNeuLink's AutodiffComposition, and in Pytorch.
 
@@ -44,13 +42,13 @@ xor_targets = np.array(  # the outputs we wish to see from the model
 # Parameters for training -------------------------------------------------------------------------
 # these parameters are used by all three systems (PsyNeuLink System, AutodiffComposition, and PyTorch)
 # number of training rounds (epochs)
-num_epochs = 200
-# This script takes ~40 seconds to run, if num_epochs = 200. Reducing num_epochs speeds it up but weakens training results.
+num_epochs = 500
+# This script takes ~100 seconds to run, if num_epochs = 500. Reducing num_epochs speeds it up but weakens training results.
 
 
 # learning rate (determines the size of learning updates during training)
 # higher learning rates speed up training but may reduce accuracy or prevent convergence
-learning_rate = 10
+learning_rate = 1
 
 
 # XOR in PsyNeuLink System ------------------------------------------------------------------------
@@ -62,12 +60,12 @@ xor_in = pnl.TransferMechanism(name='input_layer',
                            default_variable=np.zeros(2))
 
 xor_hid = pnl.TransferMechanism(name='hidden_layer',
-                                default_variable=np.zeros(10),
-                                function=pnl.Logistic())
+                            default_variable=np.zeros(10),
+                            function=pnl.Logistic())
 
 xor_out = pnl.TransferMechanism(name='output_layer',
-                                default_variable=np.zeros(1),
-                                function=pnl.Logistic())
+                            default_variable=np.zeros(1),
+                            function=pnl.Logistic())
 
 # projection that takes the signal from the input layer and transforms it to get an input for
 # the hidden layer (the xor_hid mechanism)
@@ -131,12 +129,12 @@ xor_in = pnl.TransferMechanism(name='xor_in',
                            default_variable=np.zeros(2))
 
 xor_hid = pnl.TransferMechanism(name='xor_hid',
-                                default_variable=np.zeros(10),
-                                function=pnl.Logistic())
+                            default_variable=np.zeros(10),
+                            function=pnl.Logistic())
 
 xor_out = pnl.TransferMechanism(name='xor_out',
-                                default_variable=np.zeros(1),
-                                function=pnl.Logistic())
+                            default_variable=np.zeros(1),
+                            function=pnl.Logistic())
 
 hid_map = pnl.MappingProjection(name='input_to_hidden',
                             matrix=np.random.randn(2,10)*0.1,
@@ -153,7 +151,7 @@ pat = 10
 min_delt = .00001
 print('AutodiffComposition has patience = ', pat)
 print('AutodiffComposition has min_delta = ', min_delt)
-xor_autodiff = AutodiffComposition(param_init_from_pnl=True, patience=pat, min_delta=min_delt)
+xor_autodiff = pnl.AutodiffComposition(param_init_from_pnl=True, patience=pat, min_delta=min_delt)
 
 # add the mechanisms (add_c_node) and projections (add_projection) to AutodiffComposition
 xor_autodiff.add_c_node(xor_in)
@@ -173,7 +171,7 @@ autodiff_total_time = time.time() - autodiff_start_time
 
 print('Output of AutodiffComposition after at most', num_epochs,
       'epochs of training, on inputs [0, 0], [0, 1], [1, 0], [1, 1]:')
-print(result[0])
+print(result)
 print('Initializing and training AutodiffComposition took ', autodiff_total_time, ' seconds.')
 print('\n')
 
