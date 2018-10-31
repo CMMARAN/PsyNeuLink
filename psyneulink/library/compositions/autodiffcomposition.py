@@ -94,9 +94,6 @@ or 'adam'.
 
 **loss** specifies the loss function for training. The current options are 'mse' (the default) and 'crossentropy'.
 
-**randomize** specifies whether the order of inputs will be randomized in each epoch. (In each epoch, all inputs are
-run, but if **randomize** is True then the order in which inputs are within an epoch is random.)
-
 If **refresh_losses** is set to True, the AutodiffComposition resets the self.losses attribute before running.
 
 .. _Composition_Class_Reference:
@@ -177,6 +174,10 @@ class AutodiffComposition(Composition):
         the minimum reduction in average loss that an epoch must provide in order to qualify as a 'good' epoch.
         Used for early stopping of training, in combination with **patience**.
 
+    randomize: boolean : default False
+    specifies whether the order of inputs will be randomized in each epoch. (In each epoch, all inputs are run, but
+    if **randomize** is True then the order of inputs within an epoch is random.)
+
     Attributes
     ----------
 
@@ -215,26 +216,29 @@ class AutodiffComposition(Composition):
                  param_init_from_pnl=True,
                  patience=None,
                  min_delta=0,
-                 learning_rate=0.5,
+                 learning_rate=0.001,
+                 learning_enabled=True,
+                 optimizer_type=None,
+                 loss_type=None,
+                 randomize=None,
+                 refresh_losses=False,
                  name="autodiff_composition"):
 
-        self.learning_enabled = True
         if not torch_available:
             raise AutodiffCompositionError('Pytorch python module (torch) is not installed. Please install it with '
                                            '`pip install torch` or `pip3 install torch`')
 
-        super(AutodiffComposition, self).__init__()
+        super(AutodiffComposition, self).__init__(name=name)
 
-        # set up target CIM
-        # self.target_CIM = CompositionInterfaceMechanism(name=self.name + " Target_CIM",
-        #                                                 composition=self)
-        # self.target_CIM_states = {}
-        self.learning_CIM = CompositionInterfaceMechanism(name=self.name + "Learning_CIM",
-                                                          composition=self)
+        self.learning_enabled = learning_enabled
+        self.optimizer_type = optimizer_type
+        self.loss_type = loss_type
+        self.randomize = randomize
+        self.refresh_losses = refresh_losses
         self.learning_rate = learning_rate
+
         # pytorch representation of model and associated training parameters
         self.pytorch_representation = None
-        # self.learning_rate = None
         self.optimizer = None
         self.loss = None
 
@@ -252,6 +256,44 @@ class AutodiffComposition(Composition):
         self.patience = patience
 
         self.min_delta = min_delta
+
+    # CLEANUP: move some of what's done in the method below to a "validate_params" type of method
+    def _build_pytorch_representation(self):
+        # set up pytorch representation of the autodiff composition's model
+        if self.pytorch_representation is None:
+            self.pytorch_representation = PytorchModelCreator(self.graph_processing,
+                                                              self.param_init_from_pnl,
+                                                              self.ordered_execution_sets)
+
+        # Set up optimizer function
+        if self.optimizer_type is None:
+            if self.optimizer is None:
+                self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
+        else:
+            if self.optimizer_type not in ['sgd', 'adam']:
+                raise AutodiffCompositionError("Invalid optimizer specified. Optimizer argument must be a string. "
+                                               "Currently, Stochastic Gradient Descent and Adam are the only available "
+                                               "optimizers (specified as 'sgd' or 'adam').")
+            if self.optimizer_type == 'sgd':
+                self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
+            else:
+                self.optimizer = optim.Adam(self.pytorch_representation.parameters(), lr=self.learning_rate)
+
+        if self.loss_type is None:
+            if self.loss is None:
+                self.loss = nn.MSELoss(reduction='sum')
+        else:
+            if self.loss_type not in ['mse', 'crossentropy']:
+                raise AutodiffCompositionError("Invalid loss specified. Loss argument must be a string. "
+                                               "Currently, Mean Squared Error and Cross Entropy are the only "
+                                               "available loss functions (specified as 'mse' or 'crossentropy').")
+            if self.loss_type == 'mse':
+                self.loss = nn.MSELoss(reduction='sum')
+            else:
+                self.loss = nn.CrossEntropyLoss(reduction='sum')
+
+        if not isinstance(self.learning_rate, (int, float)):
+            raise AutodiffCompositionError("Learning rate must be an integer or float value.")
 
     def _reshape_for_autodiff(self, stimuli):
         order = {"inputs": self.ordered_execution_sets[0],
@@ -288,35 +330,6 @@ class AutodiffComposition(Composition):
                 return inputs
         return super(AutodiffComposition, self)._adjust_stimulus_dict(inputs)
 
-    # similar function to _throw_through_input_CIM - however, this gets pytorch output from execute,
-    # assigns it to the output CIM of autodiff composition, executes the CIM, and sends
-    # its output in a list back to execute
-    def _throw_through_output_CIM(self, outputs):
-
-        order = self.ordered_execution_sets[len(self.ordered_execution_sets)-1]
-
-        output_CIM_list = []
-
-        # iterate over CIM input states - for each CIM input state, find mechanism in final execution set
-        # whose output state maps to the CIM input state, add pytorch output for this mechanism
-        # to output CIM list
-        for input_state in self.output_CIM.input_states:
-
-            for i in range(len(order)):
-                node = order[i]
-                if self.output_CIM_states[node.component.output_states[0]][0] == input_state:
-                    value = outputs[i]
-
-            output_CIM_list.append(value)
-
-        self.output_CIM.execute(output_CIM_list)
-
-        output_values = []
-        for i in range(len(self.output_CIM.output_states)):
-            output_values.append(self.output_CIM.output_states[i].value)
-
-        return output_values
-
     # performs forward computation for one input
     def autodiff_processing(self, inputs):
 
@@ -332,14 +345,14 @@ class AutodiffComposition(Composition):
         return outputs
 
     # performs learning/training on all input-target pairs it recieves for given number of epochs
-    def autodiff_training(self, inputs, targets, epochs, randomize):
+    def autodiff_training(self, inputs, targets, epochs):
 
         if self.patience is not None:
             # set up object for early stopping
             early_stopper = EarlyStopping(patience=self.patience, min_delta=self.min_delta)
 
         # if training over trial sets in random order, set up array for mapping random order back to original order
-        if randomize:
+        if self.randomize:
             rand_train_order_reverse = np.zeros(len(inputs))
 
         # get total number of output neurons from the dimensionality of targets on the first trial
@@ -353,7 +366,7 @@ class AutodiffComposition(Composition):
 
             # if training in random order, generate random order and set up mapping
             # from random order back to original order
-            if randomize:
+            if self.randomize:
                 rand_train_order = np.random.permutation(len(inputs))
                 rand_train_order_reverse[rand_train_order] = np.arange(len(inputs))
 
@@ -367,7 +380,7 @@ class AutodiffComposition(Composition):
             for t in range(len(inputs)):
 
                 # get current inputs, targets
-                if randomize:
+                if self.randomize:
                     curr_tensor_inputs = inputs[rand_train_order[t]]
                     curr_tensor_targets = targets[rand_train_order[t]]
                 else:
@@ -405,7 +418,7 @@ class AutodiffComposition(Composition):
             if self.patience is not None:
                 should_stop = early_stopper.step(average_loss)
                 if should_stop:
-                    if randomize:
+                    if self.randomize:
                         outputs_list = [None] * len(outputs)
                         for i in range(len(outputs)):
                             outputs_list[i] = outputs[int(rand_train_order_reverse[i])]
@@ -413,7 +426,7 @@ class AutodiffComposition(Composition):
                     else:
                         return outputs
 
-        if randomize:  # save outputs in a list in correct order, return them
+        if self.randomize:  # save outputs in a list in correct order, return them
             outputs_list = [None] * len(outputs)
             for i in range(len(outputs)):
                 outputs_list[i] = outputs[int(rand_train_order_reverse[i])]
@@ -423,7 +436,7 @@ class AutodiffComposition(Composition):
 
     def execute(self,
                 inputs=None,
-                autodiff_inputs=None,
+                autodiff_stimuli=None,
                 scheduler_processing=None,
                 scheduler_learning=None,
                 termination_processing=None,
@@ -445,39 +458,9 @@ class AutodiffComposition(Composition):
             if self.ordered_execution_sets is None:
                 self.ordered_execution_sets = self.get_ordered_exec_sets(self.graph_processing)
 
-            # set up pytorch representation of the autodiff composition's model
-            if self.pytorch_representation is None:
-                self.pytorch_representation = PytorchModelCreator(self.graph_processing, self.param_init_from_pnl,
-                                                                  self.ordered_execution_sets)
-
-            # FIX: pass optimizer?
-            optimizer = None
-            if optimizer is None:
-                if self.optimizer is None:
-                    self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
-            else:
-                if optimizer not in ['sgd', 'adam']:
-                    raise AutodiffCompositionError("Invalid optimizer specified. Optimizer argument must be a string. "
-                                                   "Currently, Stochastic Gradient Descent and Adam are the only available "
-                                                   "optimizers (specified as 'sgd' or 'adam').")
-                if optimizer == 'sgd':
-                    self.optimizer = optim.SGD(self.pytorch_representation.parameters(), lr=self.learning_rate)
-                else:
-                    self.optimizer = optim.Adam(self.pytorch_representation.parameters(), lr=self.learning_rate)
-            # FIX: pass loss?
-            loss = None
-            if loss is None:
-                if self.loss is None:
-                    self.loss = nn.MSELoss(reduction='sum')
-            else:
-                if loss not in ['mse', 'crossentropy']:
-                    raise AutodiffCompositionError("Invalid loss specified. Loss argument must be a string. "
-                                                   "Currently, Mean Squared Error and Cross Entropy are the only "
-                                                   "available loss functions (specified as 'mse' or 'crossentropy').")
-                if loss == 'mse':
-                    self.loss = nn.MSELoss(reduction='sum')
-                else:
-                    self.loss = nn.CrossEntropyLoss(reduction='sum')
+            # TBI: can we call _build_pytorch_representation in _analyze_graph so that pytorch
+            # model may be modified between runs?
+            self._build_pytorch_representation()
 
             if execution_id is None:
                 execution_id = self._assign_execution_ids(execution_id)
@@ -485,11 +468,15 @@ class AutodiffComposition(Composition):
             autodiff_stimuli = self._reshape_for_autodiff(inputs)
             autodiff_inputs = autodiff_stimuli["inputs"]
             autodiff_targets = autodiff_stimuli["targets"]
+            autodiff_epochs = 1
+            if "epochs" in inputs:
+                autodiff_epochs = inputs["epochs"]
 
-            output = self.autodiff_training(autodiff_inputs, autodiff_targets, inputs["epochs"], inputs["randomize"])
+            output = self.autodiff_training(autodiff_inputs, autodiff_targets, autodiff_epochs)
 
             return output
-        
+
+        # learning not enabled. execute as a normal composition
         return super(AutodiffComposition, self).execute(inputs=inputs,
                                                         scheduler_processing=scheduler_processing,
                                                         scheduler_learning=scheduler_learning,
@@ -526,16 +513,13 @@ class AutodiffComposition(Composition):
             targets=None,
             bin_execute=False,
             initial_values=None,
-            runtime_params=None,
-            learning_rate=None,
-            optimizer=None,
-            loss=None,
-            randomize=False,
-            refresh_losses=False):
+            runtime_params=None):
 
 
         # TBI: Handle trials, timesteps, etc
         if self.learning_enabled:
+            if self.refresh_losses:
+                self.losses = []
             adjusted_stimuli = self._adjust_stimulus_dict(inputs)
             if num_trials is not None:
                 for trial_num in range(num_trials):
@@ -545,149 +529,24 @@ class AutodiffComposition(Composition):
                 for stimulus in adjusted_stimuli:
                     return self.execute(inputs=stimulus)
 
-        return super(AutodiffComposition, self).run()
-
-        # validate arguments, and properties of the autodiff composition
-        # self._validate_params(targets, epochs)
-        # 
-        # # set up mechanism execution order
-        # if self.ordered_execution_sets is None:
-        #     self.ordered_execution_sets = self.get_ordered_exec_sets(self.graph_processing)
-        # 
-        # # set up pytorch representation of the autodiff composition's model
-        # if self.pytorch_representation is None:
-        #     self.pytorch_representation = PytorchModelCreator(self.graph_processing, self.param_init_from_pnl, self.ordered_execution_sets)
-        # 
-        # # if we're doing learning/training, set up learning rate, optimizer, and loss
-        # if (targets is not None):
-        # 
-        #     if learning_rate is None: # FIX DCW 10/8/18: I think this logic is wrong!
-        #         if self.learning_rate is None:
-        #             self.learning_rate = 0.001
-        #     else:
-        #         if not isinstance(learning_rate, (int, float)):
-        #             raise AutodiffCompositionError("Learning rate must be an integer or float value.")
-        #         self.learning_rate = learning_rate
-
-        # # allow user to refresh the list tracking loss on every epoch in the autodiff composition's training history
-        # if refresh_losses:
-        #     self.losses = []
-        # 
-        # # get node roles, set up CIM's
-        # self._analyze_graph()
-        # 
-        # # get execution id
-        # execution_id = self._assign_execution_ids(execution_id)
-        # 
-        # # validate how inputs are specified - if there is only one origin mechanism,
-        # # allow inputs to be specified in a list
-        # origin_nodes = self.get_c_nodes_by_role(CNodeRole.ORIGIN)
-        # if isinstance(inputs, (list, np.ndarray)):
-        #     if len(origin_nodes) == 1:
-        #         inputs = {next(iter(origin_nodes)): inputs}
-        #     else:
-        #         raise AutodiffCompositionError("Inputs to {0} must be specified in a dictionary with a "
-        #                                        "key for each of its {1} origin nodes."
-        #                                        .format(self.name, len(origin_nodes)))
-        # elif not isinstance(inputs, dict):
-        #     if len(origin_nodes) == 1:
-        #         raise AutodiffCompositionError("Inputs to {0} must be specified in a list or in a "
-        #                                        "dictionary with the origin mechanism({1}) as its only key."
-        #                                        .format(self.name, next(iter(origin_nodes)).name))
-        #     else:
-        #         raise AutodiffCompositionError("Inputs to {0} must be specified in a dictionary with a "
-        #                                        "key for each of its {1} origin nodes."
-        #                                        .format(self.name, len(origin_nodes)))
-        # 
-        # # validate inputs, get adjusted inputs, number of input trial sets
-        # inputs, num_input_sets = self._adjust_stimulus_dict(inputs, 'inputs')
-        # 
-        # 
-        # # if we're just doing step-by-step processing
-        # if targets is None:
-        # 
-        #     results = []
-        # 
-        #     # iterate over inputs
-        #     for trial_num in range(num_input_sets):
-        # 
-        #         # PROCESSING ------------------------------------------------------------------------
-        # 
-        #         # prepare current input
-        #         execution_stimuli = {}
-        #         for node in inputs:
-        #             execution_stimuli[node] = inputs[node][trial_num]
-        # 
-        #         # call execute function to process current input
-        #         trial_output = self.execute(inputs=execution_stimuli,
-        #                                     execution_id=execution_id)
-        # 
-        #         # -----------------------------------------------------------------------------------
-        # 
-        #         # store the result of this execute in case it will be the final result
-        #         if isinstance(trial_output, Iterable):
-        #             result_copy = trial_output.copy()
-        #         else:
-        #             result_copy = trial_output
-        #         results.append(result_copy)
-        # 
-        #     self.results.append(results)
-        # 
-        # 
-        # # if we're doing batch learning
-        # else:
-        # 
-        #     # validate how targets are specified - if there is only one terminal mechanism,
-        #     # allow targets to be specified in a list
-        #     terminal_nodes = self.get_c_nodes_by_role(CNodeRole.TERMINAL)
-        #     if isinstance(targets, (list, np.ndarray)):
-        #         if len(terminal_nodes) == 1:
-        #             targets = {next(iter(terminal_nodes)): targets}
-        #         else:
-        #             raise AutodiffCompositionError("Targets to {0} must be specified in a dictionary with a "
-        #                                            "key for each of its {1} terminal nodes."
-        #                                            .format(self.name, len(terminal_nodes)))
-        #     elif not isinstance(targets, dict):
-        #         if len(terminal_nodes) == 1:
-        #             raise AutodiffCompositionError("Targets to {0} must be specified in a list or in a "
-        #                                            "dictionary with the terminal mechanism({1}) as its only key."
-        #                                            .format(self.name, next(iter(terminal_nodes)).name))
-        #         else:
-        #             raise AutodiffCompositionError("Targets to {0} must be specified in a dictionary with a "
-        #                                            "key for each of its {1} terminal nodes."
-        #                                            .format(self.name, len(terminal_nodes)))
-        # 
-        #     # validate targets, get adjusted targets, number of target trial sets
-        #     targets, num_target_sets = self._adjust_stimulus_dict(targets, 'targets')
-        # 
-        #     # check that number of target trial sets and number of input trial sets are the same
-        #     if num_input_sets != num_target_sets:
-        #         raise AutodiffCompositionError("Number of input trial sets ({0}) provided and number of "
-        #                                        "target trial sets ({1}) provided to {2} are different."
-        #                                        .format(num_input_sets, num_target_sets, self.name))
-        # 
-        #     # LEARNING ------------------------------------------------------------------------------
-        # 
-        #     # call execute function to do learning for desired number of epochs on all input-target pairs
-        #     trial_output = self.execute(inputs=inputs,
-        #                                 targets=targets,
-        #                                 epochs=epochs,
-        #                                 randomize=randomize,
-        #                                 execution_id=execution_id)
-        # 
-        #     # ---------------------------------------------------------------------------------------
-        # 
-        #     # store the result of this execute
-        #     if isinstance(trial_output, Iterable):
-        #         result_copy = trial_output.copy()
-        #     else:
-        #         result_copy = trial_output
-        #     self.results.append(result_copy)
-        # 
-        # 
-        # # return result
-        # return self.results
-
+        return super(AutodiffComposition, self).run(inputs=inputs,
+                                                    scheduler_processing=scheduler_processing,
+                                                    scheduler_learning=scheduler_learning,
+                                                    termination_processing=termination_processing,
+                                                    termination_learning=termination_learning,
+                                                    execution_id=execution_id,
+                                                    num_trials=num_trials,
+                                                    call_before_time_step=call_before_time_step,
+                                                    call_after_time_step=call_after_time_step,
+                                                    call_before_pass=call_before_pass,
+                                                    call_after_pass=call_after_pass,
+                                                    call_before_trial=call_before_trial,
+                                                    call_after_trial=call_after_trial,
+                                                    clamp_input=clamp_input,
+                                                    targets=targets,
+                                                    bin_execute=bin_execute,
+                                                    initial_values=initial_values,
+                                                    runtime_params=runtime_params)
 
 
     # # validates properties of the autodiff composition, and arguments to run, when run is called
@@ -813,102 +672,6 @@ class AutodiffComposition(Composition):
                 ordered_exec_sets[max_dist].append(node)
             return ordered_exec_sets, max_dist
 
-
-    # TODO (CW 9/28): this mirrors _adjust_stimulus_dict() in Composition but doesn't call super().
-    #   This is not ideal, but I don't see a simple way to rewrite this function to call super().
-    # validates inputs/targets. overriden to be able to adjust a dictionary of inputs or targets
-    # (not just inputs). the adjusting is exactly the same though.
-    # def _adjust_stimulus_dict(self, stimuli, inputs_or_targets):
-    #
-    #
-    #     # check if we're dealing with inputs or targets, set variables accordingly
-    #     if inputs_or_targets == 'inputs':
-    #         nodes = self.get_c_nodes_by_role(CNodeRole.ORIGIN)
-    #     else:
-    #         nodes = self.get_c_nodes_by_role(CNodeRole.TERMINAL)
-    #
-    #
-    #     # STEP 1: Validate that there is a one-to-one mapping of input/target entries to origin/terminal nodes
-    #
-    #     # Check that all of the nodes listed in the stimuli dict are ORIGIN/TERMINAL nodes in self
-    #     for node in stimuli.keys():
-    #         if not node in nodes:
-    #             if inputs_or_targets == 'inputs':
-    #                 raise AutodiffCompositionError("{0} in inputs dict for {1} is not one of its ORIGIN nodes"
-    #                                                .format(node.name, self.name))
-    #             else:
-    #                 raise AutodiffCompositionError("{0} in inputs dict for {1} is not one of its TERMINAL nodes"
-    #                                                .format(node.name, self.name))
-    #
-    #     # Check that all of the ORIGIN/TERMINAL nodes are represented - if not, use default_variable
-    #     for node in nodes:
-    #         if not node in stimuli:
-    #             stimuli[node] = node.default_external_input_values
-    #
-    #
-    #     # STEP 2: Loop over all dictionary entries to validate their content and adjust any convenience notations:
-    #
-    #     adjusted_stimuli = {}
-    #     num_sets = -1
-    #
-    #     for node, stim_list in stimuli.items():
-    #
-    #         input_must_match = node.external_input_values
-    #
-    #         # check if we have 1 trial's worth of correct inputs/targets
-    #         check_spec_type = self._input_matches_variable(stim_list, input_must_match)
-    #         if check_spec_type == "homogeneous":
-    #             adjusted_stimuli[node] = [np.atleast_2d(stim_list)]
-    #
-    #             # verify that all nodes have provided the same number of inputs/targets
-    #             if num_sets == -1:
-    #                 num_sets = 1
-    #             elif num_sets != 1:
-    #                 raise RunError("Input specification for {0} is not valid. The number of inputs (1) provided for {1}"
-    #                                "conflicts with at least one other node's input specification."
-    #                                .format(self.name, node.name))
-    #
-    #         else:
-    #             adjusted_stimuli[node] = []
-    #             for stim in stimuli[node]:
-    #
-    #                 # check if we have 1 trial's worth of correct inputs/targets
-    #                 check_spec_type = self._input_matches_variable(stim, input_must_match)
-    #                 if check_spec_type == False:
-    #                     err_msg = "Input stimulus ({0}) for {1} is incompatible with its external_input_values ({2}).".\
-    #                         format(stim, node.name, input_must_match)
-    #                     if "KWTA" in str(type(node)):
-    #                         err_msg = err_msg + " For KWTA mechanisms, remember to append an array of zeros (or other values)" \
-    #                                             " to represent the outside stimulus for the inhibition input state, and " \
-    #                                             "for systems, put your inputs"
-    #                     raise RunError(err_msg)
-    #                 else:
-    #                     adjusted_stimuli[node].append(np.atleast_2d(stim))
-    #
-    #             # verify that all nodes have provided the same number of inputs/targets
-    #             if num_sets == -1:
-    #                 num_sets = len(stimuli[node])
-    #             elif num_sets != len(stimuli[node]):
-    #                 raise RunError("Input specification for {0} is not valid. The number of inputs ({1}) provided for {2}"
-    #                                "conflicts with at least one other node's input specification."
-    #                                .format(self.name, len(stimuli[node]), node.name))
-    #
-    #     return adjusted_stimuli, num_sets
-    #
-    #
-
-    # helper function for _adjust_stimulus_dict. overriden to permit only homogenous inputs -
-    # autodiff compositions cannot have mechanisms with multiple input states of different lengths
-    # def _input_matches_variable(self, input_value, var):
-    #
-    #     if np.shape(np.atleast_2d(input_value)) == np.shape(var):
-    #         return "homogeneous"
-    #
-    #     return False
-    #
-
-
-    # gives user weights and biases of the model (from the pytorch representation)
     def get_parameters(self):
 
         if self.pytorch_representation is None:
