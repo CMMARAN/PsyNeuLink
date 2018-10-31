@@ -2120,7 +2120,8 @@ class Mechanism_Base(Mechanism):
         elif hasattr(self, "integrator_function"):
             if isinstance(self.integrator_function, Integrator):
                 new_input = self.integrator_function.reinitialize(*args)[0]
-                self.value = self.function_object.execute(context="REINITIALIZING")
+                self.value = self.function_object.execute(variable=new_input,
+                                                          context="REINITIALIZING")
                 self._update_output_states(context="REINITIALIZING")
 
             elif self.integrator_function is None:
