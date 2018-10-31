@@ -3302,7 +3302,7 @@ class Composition(Composition_Base):
             if isinstance(node, Composition):
                 if isinstance(stim_list, dict):
 
-                    adjusted_stimulus_dict, num_trials = node._adjust_stimulus_dict(stim_list)
+                    adjusted_stimulus_dict, num_trials, autodiff_stimuli = node._adjust_stimulus_dict(stim_list)
                     translated_stimulus_dict = {}
 
                     # first time through the stimulus dictionary, assemble a dictionary in which the keys are input CIM

@@ -76,7 +76,7 @@ class PathwayComposition(Composition):
 
     def execute(self,
                 inputs=None,
-                autodiff_inputs=None,
+                autodiff_stimuli=None,
                 scheduler_processing=None,
                 scheduler_learning=None,
                 termination_processing=None,

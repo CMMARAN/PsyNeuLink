@@ -861,9 +861,12 @@ def run(obj,
                 obj.context.execution_phase = ContextFlags.PROCESSING
                 obj.context.string = RUN + ": EXECUTING " + object_type.upper() + " " + obj.name
 
-            result = obj.execute(termination_processing=termination_processing,
-                                 termination_learning=termination_learning, execution_id=execution_id,
-                                 runtime_params=runtime_params, context=context)
+            result = obj.execute(input=execution_inputs,
+                                 termination_processing=termination_processing,
+                                 termination_learning=termination_learning,
+                                 execution_id=execution_id,
+                                 runtime_params=runtime_params,
+                                 context=context)
 
             if call_after_time_step:
                 call_after_time_step()
