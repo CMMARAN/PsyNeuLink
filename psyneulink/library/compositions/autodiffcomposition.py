@@ -124,6 +124,7 @@ from collections import Iterable
 from toposort import toposort
 
 import logging
+from psyneulink.core.scheduling.scheduler import Scheduler
 try:
     import torch
     from torch import nn
@@ -255,6 +256,9 @@ class AutodiffComposition(Composition):
         self.patience = patience
 
         self.min_delta = min_delta
+
+        # CW 11/1/18: Perhaps should make scheduler a property, similar to in Composition
+        self.scheduler = None
 
 
     # TODO (CW 9/28): this mirrors _create_CIM_states() in Composition but doesn't call super().
@@ -681,12 +685,9 @@ class AutodiffComposition(Composition):
         # validate arguments, and properties of the autodiff composition
         self._validate_params(targets, epochs)
 
-        # set up mechanism execution order
-        if self.ordered_execution_sets is None:
-            self.ordered_execution_sets = self.get_ordered_exec_sets(self.graph_processing)
-
-        # set up pytorch representation of the autodiff composition's model
-        if self.pytorch_representation is None:
+        if self.scheduler is None:  # when the autodiffComposition is run for the first time
+            self.scheduler = Scheduler(graph=self.graph_processing)
+            self.ordered_execution_sets = list(self.scheduler.run())
             self.pytorch_representation = PytorchModelCreator(self.graph_processing, self.param_init_from_pnl, self.ordered_execution_sets)
 
         # if we're doing learning/training, set up learning rate, optimizer, and loss
