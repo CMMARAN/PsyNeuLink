@@ -85,6 +85,8 @@ class PytorchModelCreator(torch.nn.Module):
 
                 # get forward computation info for current node
                 node = self.ordered_execution_sets[i][j]
+                # idea: instead of requiring inputs to be ordered, use dict of inputs like in Composition
+                # then use myDict[node.component] to find correct input
                 biases = self.node_to_forward_info[node][1]
                 function = self.node_to_forward_info[node][2]
                 afferents = self.node_to_forward_info[node][3]
