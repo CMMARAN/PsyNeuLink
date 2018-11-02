@@ -153,7 +153,13 @@ pat = 10
 min_delt = .00001
 print('AutodiffComposition has patience = ', pat)
 print('AutodiffComposition has min_delta = ', min_delt)
-xor_autodiff = AutodiffComposition(param_init_from_pnl=True, patience=pat, min_delta=min_delt)
+xor_autodiff = AutodiffComposition(
+    param_init_from_pnl=True,
+    patience=pat,
+    min_delta=min_delt,
+    learning_rate=learning_rate,
+    optimizer_type='sgd' # the default optimizer in System is sgd, so we use sgd here as well
+)
 
 # add the mechanisms (add_c_node) and projections (add_projection) to AutodiffComposition
 xor_autodiff.add_c_node(xor_in)
@@ -164,11 +170,8 @@ xor_autodiff.add_c_node(xor_out)
 xor_autodiff.add_projection(sender=xor_in, projection=hid_map, receiver=xor_hid)
 xor_autodiff.add_projection(sender=xor_hid, projection=out_map, receiver=xor_out)
 
-result = xor_autodiff.run(inputs={xor_in: xor_inputs},
-                 targets={xor_out: xor_targets},
-                 epochs=num_epochs,
-                 learning_rate=learning_rate,
-                 optimizer='sgd')  # the default optimizer in System is sgd, so we use sgd here as well
+input_dict = {'inputs': {xor_in: xor_inputs}, 'targets': {xor_out: xor_targets}, 'epochs': num_epochs}
+result = xor_autodiff.run(inputs=input_dict)
 autodiff_total_time = time.time() - autodiff_start_time
 
 print('Output of AutodiffComposition after at most', num_epochs,
