@@ -460,7 +460,6 @@ class AutodiffComposition(Composition):
                 outputs_list[i] = outputs[int(rand_train_order_reverse[i])]
             return outputs_list
         else:
-            print('outputs after autodiff_training: ', outputs)
             return outputs
 
     def execute(self,
