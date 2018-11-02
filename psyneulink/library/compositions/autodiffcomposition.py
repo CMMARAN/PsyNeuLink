@@ -541,6 +541,9 @@ class AutodiffComposition(Composition):
 
         # TBI: Handle trials, timesteps, etc
         if self.learning_enabled:
+
+            self._analyze_graph()
+
             if self.refresh_losses:
                 self.losses = []
             adjusted_stimuli = self._adjust_stimulus_dict(inputs)
