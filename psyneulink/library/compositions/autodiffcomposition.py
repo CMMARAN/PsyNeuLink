@@ -545,10 +545,22 @@ class AutodiffComposition(Composition):
             if num_trials is not None:
                 for trial_num in range(num_trials):
                     stimulus_index = trial_num % len(adjusted_stimuli)
-                    return self.execute(inputs=adjusted_stimuli[stimulus_index])
+                    trial_output = self.execute(inputs=adjusted_stimuli[stimulus_index])
+                    if isinstance(trial_output, Iterable):
+                        result_copy = trial_output.copy()
+                    else:
+                        result_copy = trial_output
+                    self.results.append(result_copy)
+                    return self.results
             else:
                 for stimulus in adjusted_stimuli:
-                    return self.execute(inputs=stimulus)
+                    trial_output = self.execute(inputs=stimulus)
+                    if isinstance(trial_output, Iterable):
+                        result_copy = trial_output.copy()
+                    else:
+                        result_copy = trial_output
+                    self.results.append(result_copy)
+                    return self.results
 
         return super(AutodiffComposition, self).run(inputs=inputs,
                                                     scheduler_processing=scheduler_processing,
