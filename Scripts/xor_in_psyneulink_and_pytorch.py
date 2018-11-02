@@ -158,7 +158,8 @@ xor_autodiff = AutodiffComposition(
     patience=pat,
     min_delta=min_delt,
     learning_rate=learning_rate,
-    optimizer_type='sgd' # the default optimizer in System is sgd, so we use sgd here as well
+    optimizer_type='sgd', # the default optimizer in System is sgd, so we use sgd here as well
+    randomize=False
 )
 
 # add the mechanisms (add_c_node) and projections (add_projection) to AutodiffComposition
