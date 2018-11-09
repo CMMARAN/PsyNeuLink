@@ -283,6 +283,15 @@ class MappingError(Exception):
         self.error_value = error_value
 
 
+def _mapping_projection_matrix_getter(owning_component=None, execution_id=None):
+    return owning_component.function_object.parameters.matrix.get(execution_id)
+
+
+def _mapping_projection_matrix_setter(value, owning_component=None, execution_id=None):
+    owning_component.function_object.parameters.matrix.set(value, execution_id)
+    return value
+
+
 class MappingProjection(PathwayProjection_Base):
     """
     MappingProjection(             \
@@ -439,7 +448,7 @@ class MappingProjection(PathwayProjection_Base):
 
     class Params(PathwayProjection_Base.Params):
         function = Param(LinearMatrix, stateful=False, loggable=False)
-        matrix = Param(DEFAULT_MATRIX, modulable=True)
+        matrix = Param(DEFAULT_MATRIX, modulable=True, getter=_mapping_projection_matrix_getter, setter=_mapping_projection_matrix_setter)
 
     classPreferenceLevel = PreferenceLevel.TYPE
 
